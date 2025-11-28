@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -55,7 +56,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "no handler setup")
 		return
 	}
-	a.ServeHTTP(w, r)
+	a.Handler.ServeHTTP(w, r)
 }
 
 func (a *App) Run() error {
@@ -65,19 +66,26 @@ func (a *App) Run() error {
 	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
 	freePort, err := findFreePort()
+	addr := fmt.Sprintf("127.0.0.1:%d", freePort)
+	link := fmt.Sprintf("http://%s/?token=%s", addr, a.AuthToken)
 	if err != nil {
 		return err
 	}
 	server := http.Server{
 		Handler: a,
-		Addr:    fmt.Sprintf("127.0.0.1:%d", freePort),
+		Addr:    addr,
 		BaseContext: func(_ net.Listener) context.Context {
 			return ctx
 		},
 	}
+	go a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
+		time.Sleep(5 * time.Second)
+		return nil
+	},
+	))
 	go a.BackgroundRun(
 		FunctionTask(func(ctx context.Context) error {
-			log.Printf("webserver started on 127.0.0.1:%d", freePort)
+			log.Printf("webserver started on %s", link)
 			err := server.ListenAndServe()
 			if err != nil {
 				panic(err)
@@ -88,9 +96,10 @@ func (a *App) Run() error {
 	)
 	go a.BackgroundRun(
 		FunctionTask(func(ctx context.Context) error {
-			return LaunchChromium(fmt.Sprintf("http://127.0.0.1:%d/?token=%s", freePort, a.AuthToken))
+			return LaunchChromium(link)
 		}),
 	)
+	time.Sleep(time.Second)
 	a.WaitGroup.Wait()
 	return nil
 }
