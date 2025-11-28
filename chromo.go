@@ -3,7 +3,10 @@ package eletrocromo
 import (
 	"context"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
+	"sync"
 
 	"github.com/google/uuid"
 )
@@ -11,9 +14,17 @@ import (
 type App struct {
 	Handler   http.Handler
 	AuthToken string
+	WaitGroup sync.WaitGroup
+	Context   context.Context
 }
 
 const AUTH_COOKIE_KEY = "eletrocromo_token"
+
+func (a *App) BackgroundRun(task Task) error {
+	a.WaitGroup.Add(1)
+	defer a.WaitGroup.Done()
+	return task.Run(a.Context)
+}
 
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
@@ -47,19 +58,49 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.ServeHTTP(w, r)
 }
 
-func (a *App) Run(ctx context.Context) error {
+func (a *App) Run() error {
 	if a.AuthToken == "" {
-		a.AuthToken = uuid.New()
+		a.AuthToken = uuid.New().String()
 	}
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
-	// TODO: setup webserver
-	// TODO: launch chromium to the webserver
+	freePort, err := findFreePort()
+	if err != nil {
+		return err
+	}
+	server := http.Server{
+		Handler: a,
+		Addr:    fmt.Sprintf("127.0.0.1:%d", freePort),
+		BaseContext: func(_ net.Listener) context.Context {
+			return ctx
+		},
+	}
+	a.BackgroundRun(
+		FunctionTask(func(ctx context.Context) error {
+			log.Printf("webserver started on 127.0.0.1:%s", freePort)
+			err := server.ListenAndServe()
+			if err != nil {
+				return err
+			}
+			return server.Close()
+		},
+		),
+	)
+	a.BackgroundRun(
+		FunctionTask(func(ctx context.Context) error {
+			return LaunchChromium(fmt.Sprintf("http://127.0.0.1:%d/?token=%s", freePort, a.AuthToken))
+		}),
+	)
 	return nil
 }
 
-func LaunchChromium(url string) error {
-	// TODO: implement --app
-	// TODO: implement xdg-open like as fallback
-	return nil
+func findFreePort() (int, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer listener.Close()
+
+	addr := listener.Addr().(*net.TCPAddr)
+	return addr.Port, nil
 }
