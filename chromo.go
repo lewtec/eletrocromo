@@ -75,22 +75,23 @@ func (a *App) Run() error {
 			return ctx
 		},
 	}
-	a.BackgroundRun(
+	go a.BackgroundRun(
 		FunctionTask(func(ctx context.Context) error {
-			log.Printf("webserver started on 127.0.0.1:%s", freePort)
+			log.Printf("webserver started on 127.0.0.1:%d", freePort)
 			err := server.ListenAndServe()
 			if err != nil {
-				return err
+				panic(err)
 			}
 			return server.Close()
 		},
 		),
 	)
-	a.BackgroundRun(
+	go a.BackgroundRun(
 		FunctionTask(func(ctx context.Context) error {
 			return LaunchChromium(fmt.Sprintf("http://127.0.0.1:%d/?token=%s", freePort, a.AuthToken))
 		}),
 	)
+	a.WaitGroup.Wait()
 	return nil
 }
 
