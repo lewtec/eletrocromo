@@ -71,9 +71,17 @@ func (a *App) Run() error {
 	ts.Config.BaseContext = func(_ net.Listener) context.Context {
 		return ctx
 	}
-	ts.Start()
-	defer ts.Close()
 
+	started := make(chan struct{})
+	go a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
+		ts.Start()
+		close(started)
+		<-ctx.Done()
+		ts.Close()
+		return nil
+	}))
+
+	<-started
 	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
 
 	go a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
