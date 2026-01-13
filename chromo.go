@@ -78,11 +78,6 @@ func (a *App) Run() error {
 			return ctx
 		},
 	}
-	go a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
-		time.Sleep(5 * time.Second)
-		return nil
-	},
-	))
 	go a.BackgroundRun(
 		FunctionTask(func(ctx context.Context) error {
 			log.Printf("webserver started on %s", link)
