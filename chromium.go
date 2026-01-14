@@ -3,6 +3,7 @@ package eletrocromo
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os/exec"
 
 	"github.com/jasonlovesdoggo/gopen"
@@ -44,11 +45,19 @@ func GetChromium() (string, error) {
 	return "", ErrNoChromium
 }
 
-func LaunchChromium(url string) error {
+func LaunchChromium(urlString string) error {
+	u, err := url.Parse(urlString)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("invalid URL scheme: %s", u.Scheme)
+	}
 	chromium, err := GetChromium()
 	if errors.Is(err, ErrNoChromium) {
-		return gopen.Open(url)
+		return gopen.Open(urlString)
 	}
-	cmd := exec.Command(chromium, fmt.Sprintf("--app=%s", url))
+	cmd := exec.Command(chromium, "--app", urlString)
 	return cmd.Start()
 }
