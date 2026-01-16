@@ -82,6 +82,7 @@ func (a *App) Run() error {
 
 	<-started
 	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
+	log.Printf("webserver started on %s", link)
 
 	go a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
 		select {
@@ -91,14 +92,6 @@ func (a *App) Run() error {
 		return nil
 	},
 	))
-	go a.BackgroundRun(
-		FunctionTask(func(ctx context.Context) error {
-			log.Printf("webserver started on %s", link)
-			<-ctx.Done()
-			return nil
-		},
-		),
-	)
 	go a.BackgroundRun(
 		FunctionTask(func(ctx context.Context) error {
 			return LaunchChromium(link)
