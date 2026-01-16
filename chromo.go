@@ -6,7 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
+	"net/http/httptest"
 	"sync"
 	"time"
 
@@ -66,30 +66,32 @@ func (a *App) Run() error {
 	}
 	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
-	freePort, err := findFreePort()
-	addr := fmt.Sprintf("127.0.0.1:%d", freePort)
-	link := fmt.Sprintf("http://%s/?token=%s", addr, a.AuthToken)
-	if err != nil {
-		return err
+
+	ts := httptest.NewUnstartedServer(a)
+	ts.Config.BaseContext = func(_ net.Listener) context.Context {
+		return ctx
 	}
-	server := http.Server{
-		Handler: a,
-		Addr:    addr,
-		BaseContext: func(_ net.Listener) context.Context {
-			return ctx
-		},
-	}
-	go a.BackgroundRun(
-		FunctionTask(func(ctx context.Context) error {
-			log.Printf("webserver started on %s", link)
-			err := server.ListenAndServe()
-			if err != nil {
-				panic(err)
-			}
-			return server.Close()
-		},
-		),
-	)
+
+	started := make(chan struct{})
+	go func() {
+		ts.Start()
+		close(started)
+		<-ctx.Done()
+		ts.Close()
+	}()
+
+	<-started
+	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
+	log.Printf("webserver started on %s", link)
+
+	go a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
+		select {
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+		}
+		return nil
+	},
+	))
 	go a.BackgroundRun(
 		FunctionTask(func(ctx context.Context) error {
 			u, err := url.Parse(link)
@@ -104,13 +106,3 @@ func (a *App) Run() error {
 	return nil
 }
 
-func findFreePort() (int, error) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
-	}
-	defer listener.Close()
-
-	addr := listener.Addr().(*net.TCPAddr)
-	return addr.Port, nil
-}
