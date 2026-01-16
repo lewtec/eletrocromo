@@ -45,19 +45,14 @@ func GetChromium() (string, error) {
 	return "", ErrNoChromium
 }
 
-func LaunchChromium(urlString string) error {
-	u, err := url.Parse(urlString)
-	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
-	}
-
+func LaunchChromium(u *url.URL) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("invalid URL scheme: %s", u.Scheme)
 	}
 	chromium, err := GetChromium()
 	if errors.Is(err, ErrNoChromium) {
-		return gopen.Open(urlString)
+		return gopen.Open(u.String())
 	}
-	cmd := exec.Command(chromium, "--app", urlString)
+	cmd := exec.Command(chromium, "--app", u.String())
 	return cmd.Start()
 }
