@@ -73,13 +73,12 @@ func (a *App) Run() error {
 	}
 
 	started := make(chan struct{})
-	go a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
+	go func() {
 		ts.Start()
 		close(started)
 		<-ctx.Done()
 		ts.Close()
-		return nil
-	}))
+	}()
 
 	<-started
 	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
