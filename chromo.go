@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -91,7 +92,11 @@ func (a *App) Run() error {
 	)
 	go a.BackgroundRun(
 		FunctionTask(func(ctx context.Context) error {
-			return LaunchChromium(link)
+			u, err := url.Parse(link)
+			if err != nil {
+				return err
+			}
+			return LaunchChromium(u)
 		}),
 	)
 	time.Sleep(time.Second)
