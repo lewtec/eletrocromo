@@ -2,9 +2,11 @@ package eletrocromo
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -31,7 +33,7 @@ func (a *App) BackgroundRun(task Task) error {
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token != "" {
-		if token == a.AuthToken {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) == 1 {
 			http.SetCookie(w, &http.Cookie{
 				Name:     AUTH_COOKIE_KEY,
 				Value:    token,
@@ -47,7 +49,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-	if token != a.AuthToken {
+	if subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) != 1 {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "forbidden")
 		return
