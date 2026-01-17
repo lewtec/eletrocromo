@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"time"
 
@@ -63,6 +64,9 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (a *App) Run() error {
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
+	}
+	if a.Context == nil {
+		a.Context = context.Background()
 	}
 	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
