@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"time"
 
@@ -64,6 +65,9 @@ func (a *App) Run() error {
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
 	}
+	if a.Context == nil {
+		a.Context = context.Background()
+	}
 	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
 
@@ -84,14 +88,6 @@ func (a *App) Run() error {
 	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
 	log.Printf("webserver started on %s", link)
 
-	go a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
-		select {
-		case <-time.After(5 * time.Second):
-		case <-ctx.Done():
-		}
-		return nil
-	},
-	))
 	go a.BackgroundRun(
 		FunctionTask(func(ctx context.Context) error {
 			u, err := url.Parse(link)
