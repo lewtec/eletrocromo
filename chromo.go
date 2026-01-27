@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"net/http/httptest"
 	"sync"
 	"time"
@@ -29,6 +30,12 @@ func (a *App) BackgroundRun(task Task) error {
 }
 
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if a.AuthToken == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprintf(w, "auth not configured")
+		return
+	}
+
 	token := r.URL.Query().Get("token")
 	if token != "" {
 		if token == a.AuthToken {
@@ -49,12 +56,12 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if token != a.AuthToken {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "forbidden")
+		_, _ = fmt.Fprintf(w, "forbidden")
 		return
 	}
 	if a.Handler == nil {
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "no handler setup")
+		_, _ = fmt.Fprintf(w, "no handler setup")
 		return
 	}
 	a.Handler.ServeHTTP(w, r)
