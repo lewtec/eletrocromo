@@ -1,2 +1,16 @@
 [tools]
 go = "latest"
+golangci-lint = "latest"
+
+[tasks]
+"install:go" = "go mod download"
+install = { depends = ["install:*"] }
+"lint:go" = "golangci-lint run ./..."
+lint = { depends = ["lint:*"] }
+"fmt:go" = "go fmt ./..."
+fmt = { depends = ["fmt:*"] }
+"test:go" = "go test -v ./..."
+test = { depends = ["test:*"] }
+"codegen:go" = "go generate ./..."
+codegen = { depends = ["codegen:*"] }
+ci = { depends = ["lint", "test"] }

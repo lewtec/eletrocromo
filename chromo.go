@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"time"
 
@@ -49,12 +50,12 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if token != a.AuthToken {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "forbidden")
+		_, _ = fmt.Fprintf(w, "forbidden")
 		return
 	}
 	if a.Handler == nil {
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "no handler setup")
+		_, _ = fmt.Fprintf(w, "no handler setup")
 		return
 	}
 	a.Handler.ServeHTTP(w, r)
@@ -84,23 +85,27 @@ func (a *App) Run() error {
 	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
 	log.Printf("webserver started on %s", link)
 
-	go a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
-		select {
-		case <-time.After(5 * time.Second):
-		case <-ctx.Done():
-		}
-		return nil
-	},
-	))
-	go a.BackgroundRun(
-		FunctionTask(func(ctx context.Context) error {
-			u, err := url.Parse(link)
-			if err != nil {
-				return err
+	go func() {
+		_ = a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
+			select {
+			case <-time.After(5 * time.Second):
+			case <-ctx.Done():
 			}
-			return LaunchChromium(u)
-		}),
-	)
+			return nil
+		},
+		))
+	}()
+	go func() {
+		_ = a.BackgroundRun(
+			FunctionTask(func(ctx context.Context) error {
+				u, err := url.Parse(link)
+				if err != nil {
+					return err
+				}
+				return LaunchChromium(u)
+			}),
+		)
+	}()
 	time.Sleep(time.Second)
 	a.WaitGroup.Wait()
 	return nil
