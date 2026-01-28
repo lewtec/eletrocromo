@@ -51,5 +51,4 @@ jobs:
             gh release create ${GITHUB_REF#refs/tags/} --generate-notes
           else
              echo "Running release logic for dispatch..."
-             # Placeholder for dispatch release logic
           fi

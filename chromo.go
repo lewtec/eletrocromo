@@ -65,6 +65,9 @@ func (a *App) Run() error {
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
 	}
+	if a.Context == nil {
+		a.Context = context.Background()
+	}
 	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
 
