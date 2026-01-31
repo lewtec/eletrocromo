@@ -25,7 +25,6 @@ var chromiumLikes = []string{
 	"chrome",
 	"google-chrome",
 	"google-chrome-stable",
-	"chromium",
 	"chromium-browser",
 }
 
