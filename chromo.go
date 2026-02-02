@@ -29,59 +29,70 @@ func (a *App) BackgroundRun(task Task) error {
 	return task.Run(a.Context)
 }
 
-func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
-	if token != "" {
-		if token == a.AuthToken {
-			http.SetCookie(w, &http.Cookie{
-				Name:     AUTH_COOKIE_KEY,
-				Value:    token,
-				Path:     "/",
-				HttpOnly: true,
-				SameSite: http.SameSiteStrictMode,
-			})
-		}
-	} else {
-		cookie, _ := r.Cookie(AUTH_COOKIE_KEY)
-		if cookie != nil {
-			token = cookie.Value
+func AuthMiddleware(next http.Handler, validToken string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.URL.Query().Get("token")
+		if token != "" {
+			if token == validToken {
+				http.SetCookie(w, &http.Cookie{
+					Name:     AUTH_COOKIE_KEY,
+					Value:    token,
+					Path:     "/",
+					HttpOnly: true,
+					SameSite: http.SameSiteStrictMode,
+				})
+			}
+		} else {
+			cookie, _ := r.Cookie(AUTH_COOKIE_KEY)
+			if cookie != nil {
+				token = cookie.Value
+			}
 		}
 
+		if token != validToken {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = fmt.Fprintf(w, "forbidden")
+			return
+		}
+
+		if next == nil {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = fmt.Fprintf(w, "no handler setup")
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	AuthMiddleware(a.Handler, a.AuthToken).ServeHTTP(w, r)
+}
+
+func (a *App) setupServer(ctx context.Context) *httptest.Server {
+	// Use AuthMiddleware to wrap the handler
+	handler := AuthMiddleware(a.Handler, a.AuthToken)
+	ts := httptest.NewUnstartedServer(handler)
+	ts.Config.BaseContext = func(_ net.Listener) context.Context {
+		return ctx
 	}
-	if token != a.AuthToken {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = fmt.Fprintf(w, "forbidden")
-		return
-	}
-	if a.Handler == nil {
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = fmt.Fprintf(w, "no handler setup")
-		return
-	}
-	a.Handler.ServeHTTP(w, r)
+	return ts
 }
 
 func (a *App) Run() error {
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
 	}
+	if a.Context == nil {
+		a.Context = context.Background()
+	}
+
 	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
 
-	ts := httptest.NewUnstartedServer(a)
-	ts.Config.BaseContext = func(_ net.Listener) context.Context {
-		return ctx
-	}
+	ts := a.setupServer(ctx)
+	startServer(ctx, ts)
 
-	started := make(chan struct{})
-	go func() {
-		ts.Start()
-		close(started)
-		<-ctx.Done()
-		ts.Close()
-	}()
-
-	<-started
 	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
 	log.Printf("webserver started on %s", link)
 
@@ -111,3 +122,13 @@ func (a *App) Run() error {
 	return nil
 }
 
+func startServer(ctx context.Context, ts *httptest.Server) {
+	started := make(chan struct{})
+	go func() {
+		ts.Start()
+		close(started)
+		<-ctx.Done()
+		ts.Close()
+	}()
+	<-started
+}
