@@ -49,13 +49,11 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	}
 	if token != a.AuthToken {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = fmt.Fprintf(w, "forbidden")
+		http.Error(w, "forbidden", http.StatusUnauthorized)
 		return
 	}
 	if a.Handler == nil {
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = fmt.Fprintf(w, "no handler setup")
+		http.Error(w, "no handler setup", http.StatusNotFound)
 		return
 	}
 	a.Handler.ServeHTTP(w, r)
