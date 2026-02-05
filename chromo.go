@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"sync"
 	"time"
 
@@ -90,25 +89,10 @@ func (a *App) Run() error {
 	log.Printf("webserver started on %s", link)
 
 	go func() {
-		_ = a.BackgroundRun(FunctionTask(func(ctx context.Context) error {
-			select {
-			case <-time.After(5 * time.Second):
-			case <-ctx.Done():
-			}
-			return nil
-		},
-		))
+		_ = a.BackgroundRun(NewKeepAliveTask(5 * time.Second))
 	}()
 	go func() {
-		_ = a.BackgroundRun(
-			FunctionTask(func(ctx context.Context) error {
-				u, err := url.Parse(link)
-				if err != nil {
-					return err
-				}
-				return LaunchChromium(u)
-			}),
-		)
+		_ = a.BackgroundRun(NewBrowserLaunchTask(link))
 	}()
 	time.Sleep(time.Second)
 	a.WaitGroup.Wait()
