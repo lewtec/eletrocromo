@@ -30,6 +30,9 @@ var chromiumLikes = []string{
 
 var ErrNoChromium = errors.New("no chromium detected")
 
+// GetChromium searches for a Chromium-based browser installation on the system.
+// It iterates through a predefined list of common browser paths and executable names,
+// returning the path of the first one found.
 func GetChromium() (string, error) {
 	for _, ch := range chromiumLikes {
 		path, err := exec.LookPath(ch)
@@ -44,6 +47,10 @@ func GetChromium() (string, error) {
 	return "", ErrNoChromium
 }
 
+// LaunchChromium opens the specified URL in a Chromium-based browser in "app mode" (borderless).
+// If no suitable browser is found, it falls back to the system's default browser.
+//
+// This function enforces security by requiring the URL scheme to be either "http" or "https".
 func LaunchChromium(u *url.URL) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("invalid URL scheme: %s", u.Scheme)
