@@ -49,7 +49,7 @@ if len(token) == len(validToken) && subtle.ConstantTimeCompare([]byte(token), []
 			}
 		}
 
-		if token != validToken {
+if len(token) != len(validToken) || subtle.ConstantTimeCompare([]byte(token), []byte(validToken)) != 1 {
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = fmt.Fprintf(w, "forbidden")
 			return
