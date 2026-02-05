@@ -33,7 +33,7 @@ func AuthMiddleware(next http.Handler, validToken string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.URL.Query().Get("token")
 		if token != "" {
-			if token == validToken {
+if len(token) == len(validToken) && subtle.ConstantTimeCompare([]byte(token), []byte(validToken)) == 1 {
 				http.SetCookie(w, &http.Cookie{
 					Name:     AUTH_COOKIE_KEY,
 					Value:    token,
