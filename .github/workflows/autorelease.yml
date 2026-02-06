@@ -22,7 +22,8 @@ jobs:
 
       - name: Install mise
         run: |
-          curl https://mise.run | sh
+          curl -o install.sh https://mise.run
+          sh install.sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
