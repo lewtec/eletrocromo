@@ -28,6 +28,7 @@ var chromiumLikes = []string{
 	"chromium-browser",
 }
 
+// ErrNoChromium is returned when no suitable Chromium-based browser is found on the system.
 var ErrNoChromium = errors.New("no chromium detected")
 
 // GetChromium searches for a Chromium-based browser installation on the system.

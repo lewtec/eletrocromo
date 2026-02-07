@@ -18,12 +18,24 @@ import (
 // authentication state, and the internal web server.
 // It coordinates background tasks and ensures graceful shutdown.
 type App struct {
-	Handler   http.Handler
+	// Handler is the HTTP handler that will serve the application's content.
+	// If nil, requests will receive a 404 Not Found response.
+	Handler http.Handler
+
+	// AuthToken is the secret token used for authentication.
+	// If empty, a random UUID will be generated on startup.
 	AuthToken string
+
+	// WaitGroup is used to synchronize background tasks.
+	// Run() will block until this WaitGroup counter reaches zero.
 	WaitGroup sync.WaitGroup
-	Context   context.Context
+
+	// Context is the base context for the application.
+	// If nil, context.Background() will be used.
+	Context context.Context
 }
 
+// AUTH_COOKIE_KEY is the name of the cookie used to store the authentication token.
 const AUTH_COOKIE_KEY = "eletrocromo_token"
 
 // BackgroundRun executes a given task in a separate goroutine.
@@ -77,15 +89,18 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.Handler.ServeHTTP(w, r)
 }
 
-// Run starts the application and blocks until the context is cancelled.
+// Run starts the application and blocks until all background tasks complete.
 //
 // Startup Sequence:
 // 1. Generates a new random AuthToken if one is not already set.
 // 2. Starts an internal HTTP server (using httptest.Server for simplified port management).
 // 3. Launches the Chromium browser pointing to the server's URL with the auth token.
-// 4. Waits for the application context to be cancelled.
+// 4. Waits for the App.WaitGroup to drain.
 //
-// It also starts a heartbeat task to keep the process alive/monitored if needed.
+// Note: By default, a 5-second keep-alive task is started. Since the browser launch
+// task finishes immediately (non-blocking process start), the application will exit
+// after approximately 5 seconds unless other long-running tasks are added to the
+// WaitGroup or the context is held open by other means.
 func (a *App) Run() error {
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
