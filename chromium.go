@@ -9,6 +9,9 @@ import (
 	"github.com/jasonlovesdoggo/gopen"
 )
 
+// chromiumLikes defines the priority list of browser executable paths and names.
+// It is used by GetChromium to find a suitable browser on the system, checking
+// each entry in order.
 var chromiumLikes = []string{
 	"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", // we hate it but we can count it's there
 	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
