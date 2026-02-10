@@ -20,6 +20,9 @@ func (f FunctionTask) Run(ctx context.Context) error {
 	return f(ctx)
 }
 
+// NewKeepAliveTask creates a task that blocks for a specified duration or until the context is cancelled.
+// It is used to ensure the application remains active for a minimum period, preventing premature exit
+// when other tasks (like browser launching) complete immediately.
 func NewKeepAliveTask(d time.Duration) Task {
 	return FunctionTask(func(ctx context.Context) error {
 		select {
@@ -30,6 +33,8 @@ func NewKeepAliveTask(d time.Duration) Task {
 	})
 }
 
+// NewBrowserLaunchTask creates a task that launches the default Chromium-based browser pointing to the given URL.
+// The task returns immediately after successfully starting the browser process and does not wait for the browser to close.
 func NewBrowserLaunchTask(urlStr string) Task {
 	return FunctionTask(func(ctx context.Context) error {
 		u, err := url.Parse(urlStr)
