@@ -38,9 +38,9 @@ func (a *App) BackgroundRun(task Task) error {
 // ServeHTTP handles incoming HTTP requests with authentication enforcement.
 //
 // Authentication Flow:
-// 1. Checks for an authentication token in the URL query parameters (used for the initial handshake).
-// 2. If present and valid, sets a strict, HttpOnly cookie with the token.
-// 3. If no query token is present, falls back to checking the cookie.
+// 1. Checks for an authentication token in the URL query parameters (primary method for initial handshake).
+// 2. If a valid query token is found, it sets a strict, HttpOnly cookie with the token.
+// 3. If no query token is present, it falls back to checking the "eletrocromo_token" cookie.
 //
 // Security Policy:
 // - Fail Closed: If the token is invalid or missing, returns 401 Unauthorized.
@@ -77,15 +77,18 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.Handler.ServeHTTP(w, r)
 }
 
-// Run starts the application and blocks until the context is cancelled.
+// Run starts the application and blocks until all background tasks complete
+// or the context is cancelled.
 //
 // Startup Sequence:
 // 1. Generates a new random AuthToken if one is not already set.
 // 2. Starts an internal HTTP server (using httptest.Server for simplified port management).
-// 3. Launches the Chromium browser pointing to the server's URL with the auth token.
-// 4. Waits for the application context to be cancelled.
+// 3. Launches a "KeepAlive" task that holds the process open for a minimum duration (default 5s).
+// 4. Launches the Chromium browser pointing to the server's URL with the auth token.
+// 5. Waits for the WaitGroup (which tracks background tasks) to clear.
 //
-// It also starts a heartbeat task to keep the process alive/monitored if needed.
+// Note: The application will exit automatically when the KeepAlive task finishes (after 5s)
+// unless other long-running tasks are added to the background runner.
 func (a *App) Run() error {
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
