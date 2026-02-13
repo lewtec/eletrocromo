@@ -27,3 +27,15 @@ This file lists patterns of changes that have been consistently rejected by huma
 **- Pattern:** Using helpers like `http.Error` that modify the response body (e.g., adding newlines) in refactors, potentially breaking clients or tests expecting exact string matches.
 **- Justification:** Refactors must preserve external behavior. `http.Error` appends a newline, which changes the response body and may break strict clients or tests.
 **- Files Affected:** `chromo.go`
+
+## IGNORE: Incomplete Tooling Configuration
+
+**- Pattern:** Adding configuration files (e.g., `.golangci.yml`) without updating the CI/CD pipeline (`.github/workflows/*.yml`) to execute the new tools.
+**- Justification:** Tooling is only effective if enforced by CI. Adding config files without enforcement creates false confidence and "dead" configuration.
+**- Files Affected:** `.golangci.yml`, `.github/workflows/*`
+
+## IGNORE: Generated Artifacts in Pull Requests
+
+**- Pattern:** Submitting generated files, installation scripts (e.g., `install_mise.sh`), or build artifacts.
+**- Justification:** The repository should contain source code only. Installation scripts should be fetched from official sources or generated during the build process, not committed to the repo.
+**- Files Affected:** `install_mise.sh`, `dist/*`, `bin/*`
