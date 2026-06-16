@@ -45,3 +45,27 @@ This file lists patterns of changes that have been consistently rejected by huma
 **- Pattern:** Meta-agents (e.g., Denoiser, Janitor) including unrelated code changes (e.g., test fixes) in their specific task PRs.
 **- Justification:** Meta-updates should be isolated from product code changes to ensure clear review focus and prevent accidental regressions.
 **- Files Affected:** `.jules/*`, source files
+
+## IGNORE: False Positive Vulnerabilities in ServeHTTP AuthToken
+
+**- Pattern:** Attempting to "fix" an empty `AuthToken` vulnerability in `ServeHTTP` by adding uninitialized state checks.
+**- Justification:** This is a false positive. The `App.Run` method handles token initialization automatically if empty. Adding checks to `ServeHTTP` adds redundant logic.
+**- Files Affected:** `chromo.go`
+
+## IGNORE: Submitting Identical Rejected Pull Requests
+
+**- Pattern:** Re-submitting a pull request that is exactly identical to a recently closed, unmerged pull request without changes.
+**- Justification:** Agents must learn from closed PRs. Re-submitting identical patches creates noise and demonstrates a failure to analyze rejection reasons.
+**- Files Affected:** All
+
+## IGNORE: Suppressing Errors in Tests
+
+**- Pattern:** Using blank identifier assignments (e.g., `_, _ =`) to ignore return values (especially errors) in tests, often to silence linters like `errcheck`.
+**- Justification:** Tests must strictly verify behavior. Ignoring errors defeats the purpose of testing and hides potential failures. Use explicit assertions (e.g., `if err != nil { t.Fatalf(...) }`).
+**- Files Affected:** `*_test.go`
+
+## IGNORE: Non-Existent Dependency Versions
+
+**- Pattern:** Upgrading dependencies to versions that do not exist (e.g., `actions/checkout@v5`) based on hallucinated release notes or assumptions.
+**- Justification:** Agents must verify version existence. Blind upgrades break CI/CD pipelines.
+**- Files Affected:** `.github/workflows/*`, `go.mod`, `mise.toml`
