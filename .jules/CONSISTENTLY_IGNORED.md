@@ -45,3 +45,27 @@ This file lists patterns of changes that have been consistently rejected by huma
 **- Pattern:** Meta-agents (e.g., Denoiser, Janitor) including unrelated code changes (e.g., test fixes) in their specific task PRs.
 **- Justification:** Meta-updates should be isolated from product code changes to ensure clear review focus and prevent accidental regressions.
 **- Files Affected:** `.jules/*`, source files
+
+## IGNORE: Dismissing AuthToken Vulnerability as False Positive
+
+**- Pattern:** Attempting to "fix" an empty `AuthToken` vulnerability in `ServeHTTP` by adding uninitialized state checks or dismissing the finding as a false positive.
+**- Justification:** An uninitialized `AuthToken` inside `ServeHTTP` constitutes a real vulnerability, not a false positive. An empty `AuthToken` matches an empty request token, granting unauthorized access. Security controls must 'fail closed' and explicitly deny access when unconfigured.
+**- Files Affected:** `chromo.go`
+
+## IGNORE: Suppressing Errors
+
+**- Pattern:** Using blank identifier assignments (e.g., `_, _ =`) to intentionally ignore return values, especially errors (e.g., from `w.Write` or `fmt.Fprintf`).
+**- Justification:** Tests and production code must strictly verify behavior and handle failures. Ignoring errors defeats the purpose of testing, hides potential bugs, and violates the "Never ignore errors" global directive. Use explicit assertions (e.g., `if err != nil { t.Fatalf(...) }`).
+**- Files Affected:** `*_test.go`, `*.go`
+
+## IGNORE: Non-Existent Dependency Versions
+
+**- Pattern:** Upgrading dependencies to versions that do not exist (e.g., `actions/checkout@v5`) based on hallucinated release notes or assumptions without verification.
+**- Justification:** Agents must verify version existence before proposing upgrades. Blind upgrades break CI/CD pipelines and cause build failures.
+**- Files Affected:** `.github/workflows/*`, `go.mod`, `mise.toml`
+
+## IGNORE: Submitting Identical Rejected Pull Requests
+
+**- Pattern:** Re-submitting a pull request that is exactly identical (character-for-character) to a recently closed, unmerged pull request without applying the required feedback or changes.
+**- Justification:** Agents must learn from closed PRs and review feedback. Re-submitting identical patches creates noise, demonstrates a failure to analyze rejection reasons, and wastes reviewer time.
+**- Files Affected:** All
