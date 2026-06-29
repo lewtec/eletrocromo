@@ -6,3 +6,4 @@
 **Root Cause:** Redundant data entry, likely a copy-paste error.
 **Solution:** Removed the second occurrence of "chromium" from the list.
 **Pattern:** Duplicate data in configuration/lists.
+- 2026-06-29: Replaced blank identifier assignments (`_, _ =`) with centralized error reporting (`ReportError`) for all ignored errors.

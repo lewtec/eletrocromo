@@ -66,12 +66,16 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) != 1 {
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = fmt.Fprintf(w, "forbidden")
+		if _, err := fmt.Fprintf(w, "forbidden"); err != nil {
+			ReportError(err)
+		}
 		return
 	}
 	if a.Handler == nil {
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = fmt.Fprintf(w, "no handler setup")
+		if _, err := fmt.Fprintf(w, "no handler setup"); err != nil {
+			ReportError(err)
+		}
 		return
 	}
 	a.Handler.ServeHTTP(w, r)
@@ -114,10 +118,14 @@ func (a *App) Run() error {
 	log.Printf("webserver started on %s", link)
 
 	go func() {
-		_ = a.BackgroundRun(NewKeepAliveTask(5 * time.Second))
+		if err := a.BackgroundRun(NewKeepAliveTask(5 * time.Second)); err != nil {
+			ReportError(err)
+		}
 	}()
 	go func() {
-		_ = a.BackgroundRun(NewBrowserLaunchTask(link))
+		if err := a.BackgroundRun(NewBrowserLaunchTask(link)); err != nil {
+			ReportError(err)
+		}
 	}()
 	time.Sleep(time.Second)
 	a.WaitGroup.Wait()
