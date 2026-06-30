@@ -46,6 +46,13 @@ func (a *App) BackgroundRun(task Task) error {
 // - Fail Closed: If the token is invalid or missing, returns 401 Unauthorized.
 // - If no internal Handler is configured, returns 404 Not Found.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if a.AuthToken == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		if _, err := fmt.Fprintf(w, "unconfigured server"); err != nil {
+			ReportError(err)
+		}
+		return
+	}
 	token := r.URL.Query().Get("token")
 	if token != "" {
 		if subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) == 1 {
@@ -58,7 +65,10 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	} else {
-		cookie, _ := r.Cookie(AUTH_COOKIE_KEY)
+		cookie, err := r.Cookie(AUTH_COOKIE_KEY)
+		if err != nil && err != http.ErrNoCookie {
+			ReportError(err)
+		}
 		if cookie != nil {
 			token = cookie.Value
 		}
@@ -66,12 +76,16 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) != 1 {
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = fmt.Fprintf(w, "forbidden")
+		if _, err := fmt.Fprintf(w, "forbidden"); err != nil {
+			ReportError(err)
+		}
 		return
 	}
 	if a.Handler == nil {
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = fmt.Fprintf(w, "no handler setup")
+		if _, err := fmt.Fprintf(w, "no handler setup"); err != nil {
+			ReportError(err)
+		}
 		return
 	}
 	a.Handler.ServeHTTP(w, r)
