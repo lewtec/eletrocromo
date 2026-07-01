@@ -1,8 +1,4 @@
 # Janitor Journal
 
-## 2026-01-31 - Remove duplicate chromium entry
-
-**Issue:** The `chromiumLikes` slice in `chromium.go` contained the string "chromium" twice.
-**Root Cause:** Redundant data entry, likely a copy-paste error.
-**Solution:** Removed the second occurrence of "chromium" from the list.
-**Pattern:** Duplicate data in configuration/lists.
+- 2026-01-31: [Duplicate data] Removed duplicate "chromium" entry in chromiumLikes list.
+- 2026-02-12: [Ignored errors] Replaced unchecked `w.Write` and `fmt.Fprintf` calls with explicit error checks reporting to a centralized `ReportError` function.
