@@ -12,7 +12,8 @@ func main() {
 	ctx := context.Background()
 	app := eletrocromo.App{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = fmt.Fprintf(w, "it works!")
+			_, err := fmt.Fprintf(w, "it works!")
+			eletrocromo.ReportError(err)
 		}),
 		Context: ctx,
 	}

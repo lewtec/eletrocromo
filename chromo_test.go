@@ -12,7 +12,10 @@ func TestServeHTTP_Auth(t *testing.T) {
 		AuthToken: authToken,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("ok"))
+			_, err := w.Write([]byte("ok"))
+			if err != nil {
+				t.Errorf("expected no error from w.Write, got %v", err)
+			}
 		}),
 	}
 

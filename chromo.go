@@ -58,20 +58,25 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	} else {
-		cookie, _ := r.Cookie(AUTH_COOKIE_KEY)
+		cookie, err := r.Cookie(AUTH_COOKIE_KEY)
+		if err != nil && err != http.ErrNoCookie {
+			ReportError(err)
+		}
 		if cookie != nil {
 			token = cookie.Value
 		}
 
 	}
-	if subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) != 1 {
+	if a.AuthToken == "" || subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) != 1 {
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = fmt.Fprintf(w, "forbidden")
+		_, err := fmt.Fprintf(w, "forbidden")
+		ReportError(err)
 		return
 	}
 	if a.Handler == nil {
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = fmt.Fprintf(w, "no handler setup")
+		_, err := fmt.Fprintf(w, "no handler setup")
+		ReportError(err)
 		return
 	}
 	a.Handler.ServeHTTP(w, r)
@@ -114,10 +119,12 @@ func (a *App) Run() error {
 	log.Printf("webserver started on %s", link)
 
 	go func() {
-		_ = a.BackgroundRun(NewKeepAliveTask(5 * time.Second))
+		err := a.BackgroundRun(NewKeepAliveTask(5 * time.Second))
+		ReportError(err)
 	}()
 	go func() {
-		_ = a.BackgroundRun(NewBrowserLaunchTask(link))
+		err := a.BackgroundRun(NewBrowserLaunchTask(link))
+		ReportError(err)
 	}()
 	time.Sleep(time.Second)
 	a.WaitGroup.Wait()
