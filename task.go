@@ -30,12 +30,8 @@ func NewKeepAliveTask(d time.Duration) Task {
 	})
 }
 
-func NewBrowserLaunchTask(urlStr string) Task {
+func NewBrowserLaunchTask(u *url.URL) Task {
 	return FunctionTask(func(ctx context.Context) error {
-		u, err := url.Parse(urlStr)
-		if err != nil {
-			return err
-		}
 		return LaunchChromium(u)
 	})
 }

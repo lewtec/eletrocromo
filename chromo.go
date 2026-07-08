@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"time"
 
@@ -116,8 +117,13 @@ func (a *App) Run() error {
 	go func() {
 		_ = a.BackgroundRun(NewKeepAliveTask(5 * time.Second))
 	}()
+
+	parsedLink, err := url.Parse(link)
+	if err != nil {
+		return err
+	}
 	go func() {
-		_ = a.BackgroundRun(NewBrowserLaunchTask(link))
+		_ = a.BackgroundRun(NewBrowserLaunchTask(parsedLink))
 	}()
 	time.Sleep(time.Second)
 	a.WaitGroup.Wait()
