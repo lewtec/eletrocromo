@@ -3,6 +3,7 @@ package eletrocromo
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 )
+
+var DefaultKeepAlive = 5 * time.Second
 
 // App acts as the core controller for the application, managing the lifecycle,
 // authentication state, and the internal web server.
@@ -46,6 +49,12 @@ func (a *App) BackgroundRun(task Task) error {
 // - Fail Closed: If the token is invalid or missing, returns 401 Unauthorized.
 // - If no internal Handler is configured, returns 404 Not Found.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if a.AuthToken == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprintf(w, "forbidden")
+		return
+	}
+
 	token := r.URL.Query().Get("token")
 	if token != "" {
 		if subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) == 1 {
@@ -58,7 +67,10 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	} else {
-		cookie, _ := r.Cookie(AUTH_COOKIE_KEY)
+		cookie, err := r.Cookie(AUTH_COOKIE_KEY)
+		if err != nil && !errors.Is(err, http.ErrNoCookie) {
+			log.Printf("error reading cookie: %v", err)
+		}
 		if cookie != nil {
 			token = cookie.Value
 		}
@@ -114,10 +126,14 @@ func (a *App) Run() error {
 	log.Printf("webserver started on %s", link)
 
 	go func() {
-		_ = a.BackgroundRun(NewKeepAliveTask(5 * time.Second))
+		if err := a.BackgroundRun(NewKeepAliveTask(DefaultKeepAlive)); err != nil {
+			log.Printf("KeepAliveTask error: %v", err)
+		}
 	}()
 	go func() {
-		_ = a.BackgroundRun(NewBrowserLaunchTask(link))
+		if err := a.BackgroundRun(NewBrowserLaunchTask(link)); err != nil {
+			log.Printf("BrowserLaunchTask error: %v", err)
+		}
 	}()
 	time.Sleep(time.Second)
 	a.WaitGroup.Wait()
