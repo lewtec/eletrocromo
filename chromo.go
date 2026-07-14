@@ -69,7 +69,9 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-	if subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) != 1 {
+	// Fail closed when AuthToken is unset: ConstantTimeCompare("", "") would
+	// otherwise accept unauthenticated requests (ServeHTTP without Run).
+	if a.AuthToken == "" || subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) != 1 {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = fmt.Fprintf(w, "forbidden")
 		return
