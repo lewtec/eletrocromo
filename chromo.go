@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -26,13 +25,19 @@ type App struct {
 
 const AUTH_COOKIE_KEY = "eletrocromo_token"
 
-// BackgroundRun executes a given task in a separate goroutine.
-// It manages the App's WaitGroup to ensure all background tasks are completed
-// before the application shuts down.
+// BackgroundRun starts task in a new goroutine and tracks it on WaitGroup.
+// It returns immediately after scheduling; task errors are logged.
+// Callers must not wrap BackgroundRun in another goroutine — Add runs
+// synchronously so WaitGroup.Wait is race-free with respect to this call.
 func (a *App) BackgroundRun(task Task) error {
 	a.WaitGroup.Add(1)
-	defer a.WaitGroup.Done()
-	return task.Run(a.Context)
+	go func() {
+		defer a.WaitGroup.Done()
+		if err := task.Run(a.Context); err != nil {
+			log.Printf("background task: %v", err)
+		}
+	}()
+	return nil
 }
 
 // ServeHTTP handles incoming HTTP requests with authentication enforcement.
@@ -80,12 +85,11 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Run starts the application and blocks until the context is cancelled.
 //
 // Startup Sequence:
-// 1. Generates a new random AuthToken if one is not already set.
-// 2. Starts an internal HTTP server (using httptest.Server for simplified port management).
-// 3. Launches the Chromium browser pointing to the server's URL with the auth token.
-// 4. Waits for the application context to be cancelled.
-//
-// It also starts a heartbeat task to keep the process alive/monitored if needed.
+//  1. Generates a new random AuthToken if one is not already set.
+//  2. Starts an internal HTTP server (using httptest.Server for simplified port management).
+//  3. Launches the Chromium browser pointing to the server's URL with the auth token.
+//  4. Blocks until the application context is cancelled, then waits for background
+//     tasks and shuts down the server.
 func (a *App) Run() error {
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
@@ -95,6 +99,12 @@ func (a *App) Run() error {
 	}
 	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
+
+	// Background tasks and the HTTP server share the derived context so they
+	// stop together when the parent context is cancelled.
+	prevCtx := a.Context
+	a.Context = ctx
+	defer func() { a.Context = prevCtx }()
 
 	ts := httptest.NewUnstartedServer(a)
 	ts.Config.BaseContext = func(_ net.Listener) context.Context {
@@ -113,13 +123,11 @@ func (a *App) Run() error {
 	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
 	log.Printf("webserver started on %s", link)
 
-	go func() {
-		_ = a.BackgroundRun(NewKeepAliveTask(5 * time.Second))
-	}()
-	go func() {
-		_ = a.BackgroundRun(NewBrowserLaunchTask(link))
-	}()
-	time.Sleep(time.Second)
+	if err := a.BackgroundRun(NewBrowserLaunchTask(link)); err != nil {
+		return err
+	}
+
+	<-ctx.Done()
 	a.WaitGroup.Wait()
 	return nil
 }
