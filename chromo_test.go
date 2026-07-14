@@ -12,7 +12,9 @@ func TestServeHTTP_Auth(t *testing.T) {
 		AuthToken: authToken,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("ok"))
+			if _, err := w.Write([]byte("ok")); err != nil {
+				t.Errorf("write body: %v", err)
+			}
 		}),
 	}
 
@@ -87,13 +89,4 @@ func TestServeHTTP_Auth(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Verify that the constant time comparison logic is actually being used
-// This is a bit meta, but we can verify the behavior at least.
-func TestConstantTimeCompareUsage(t *testing.T) {
-	// This test just ensures we are using crypto/subtle logic in our heads,
-	// but strictly speaking we are testing the endpoint behavior above.
-	// We can't easily assert "ConstantTimeCompare was called" without mocking crypto/subtle which is impossible.
-	// So we rely on code review for that part, and functional correctness above.
 }
