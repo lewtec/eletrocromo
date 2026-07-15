@@ -69,3 +69,22 @@ func TestBackgroundRun_UsesAppContext(t *testing.T) {
 		t.Fatal("task did not observe context cancellation")
 	}
 }
+
+// Nil Context must not panic inside task.Run; same default as App.Run.
+func TestBackgroundRun_NilContext_UsesBackground(t *testing.T) {
+	app := &App{} // Context intentionally unset
+	var gotNonNil atomic.Bool
+	err := app.BackgroundRun(FunctionTask(func(taskCtx context.Context) error {
+		if taskCtx != nil {
+			gotNonNil.Store(true)
+		}
+		return nil
+	}))
+	if err != nil {
+		t.Fatalf("BackgroundRun: %v", err)
+	}
+	app.WaitGroup.Wait()
+	if !gotNonNil.Load() {
+		t.Fatal("task received nil context; expected context.Background()")
+	}
+}

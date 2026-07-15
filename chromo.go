@@ -29,11 +29,16 @@ const AUTH_COOKIE_KEY = "eletrocromo_token"
 // It returns immediately after scheduling; task errors are logged.
 // Callers must not wrap BackgroundRun in another goroutine — Add runs
 // synchronously so WaitGroup.Wait is race-free with respect to this call.
+// A nil App.Context is treated as context.Background(), matching Run.
 func (a *App) BackgroundRun(task Task) error {
+	ctx := a.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	a.WaitGroup.Add(1)
 	go func() {
 		defer a.WaitGroup.Done()
-		if err := task.Run(a.Context); err != nil {
+		if err := task.Run(ctx); err != nil {
 			log.Printf("background task: %v", err)
 		}
 	}()
