@@ -32,12 +32,13 @@ jobs:
         run: mise run codegen
 
       - name: Create PR if changes
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           commit-message: "chore: update generated code"
           title: "chore: update generated code"
           body: "Automated changes by codegen task."
           branch: "codegen-update"
+          base: ${{ github.head_ref || github.ref_name }}
 
       - name: Run CI
         run: mise run ci
