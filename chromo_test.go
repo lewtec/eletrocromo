@@ -6,6 +6,17 @@ import (
 	"testing"
 )
 
+func newAuthRequest(method, path, tokenParam, cookieValue string) *http.Request {
+	if tokenParam != "" {
+		path += "?token=" + tokenParam
+	}
+	req := httptest.NewRequest(method, path, nil)
+	if cookieValue != "" {
+		req.AddCookie(&http.Cookie{Name: AUTH_COOKIE_KEY, Value: cookieValue})
+	}
+	return req
+}
+
 func TestServeHTTP_Auth(t *testing.T) {
 	authToken := "secret-token"
 	app := &App{
@@ -52,14 +63,7 @@ func TestServeHTTP_Auth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			path := "/"
-			if tt.tokenParam != "" {
-				path += "?token=" + tt.tokenParam
-			}
-			req := httptest.NewRequest("GET", path, nil)
-			if tt.cookieValue != "" {
-				req.AddCookie(&http.Cookie{Name: AUTH_COOKIE_KEY, Value: tt.cookieValue})
-			}
+			req := newAuthRequest(http.MethodGet, "/", tt.tokenParam, tt.cookieValue)
 			w := httptest.NewRecorder()
 
 			app.ServeHTTP(w, req)
