@@ -1,0 +1,63 @@
+package eletrocromo
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+)
+
+func TestFunctionTask_Run(t *testing.T) {
+	want := errors.New("boom")
+	task := FunctionTask(func(ctx context.Context) error {
+		if ctx == nil {
+			t.Fatal("nil context")
+		}
+		return want
+	})
+	if err := task.Run(context.Background()); !errors.Is(err, want) {
+		t.Fatalf("got %v, want %v", err, want)
+	}
+}
+
+func TestNewKeepAliveTask_Completes(t *testing.T) {
+	task := NewKeepAliveTask(5 * time.Millisecond)
+	start := time.Now()
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 5*time.Millisecond {
+		t.Fatalf("returned too early: %v", elapsed)
+	}
+}
+
+func TestNewKeepAliveTask_CancelsOnContext(t *testing.T) {
+	// Long duration; cancellation must return promptly without waiting for d.
+	task := NewKeepAliveTask(time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	if err := task.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("did not observe cancel promptly: %v", elapsed)
+	}
+}
+
+func TestNewBrowserLaunchTask_InvalidURL(t *testing.T) {
+	task := NewBrowserLaunchTask("://bad")
+	err := task.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+}
+
+func TestNewBrowserLaunchTask_RejectsNonHTTPScheme(t *testing.T) {
+	task := NewBrowserLaunchTask("file:///etc/passwd")
+	err := task.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected scheme error")
+	}
+}

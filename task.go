@@ -22,8 +22,11 @@ func (f FunctionTask) Run(ctx context.Context) error {
 
 func NewKeepAliveTask(d time.Duration) Task {
 	return FunctionTask(func(ctx context.Context) error {
+		// NewTimer + Stop avoids the time.After leak when ctx cancels before d.
+		timer := time.NewTimer(d)
+		defer timer.Stop()
 		select {
-		case <-time.After(d):
+		case <-timer.C:
 		case <-ctx.Done():
 		}
 		return nil
