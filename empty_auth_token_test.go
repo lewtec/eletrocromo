@@ -32,14 +32,7 @@ func TestServeHTTP_EmptyAuthToken_FailClosed(t *testing.T) {
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			path := "/"
-			if tt.tokenParam != "" {
-				path += "?token=" + tt.tokenParam
-			}
-			req := httptest.NewRequest(http.MethodGet, path, nil)
-			if tt.cookieValue != "" {
-				req.AddCookie(&http.Cookie{Name: AUTH_COOKIE_KEY, Value: tt.cookieValue})
-			}
+			req := newAuthRequest(http.MethodGet, "/", tt.tokenParam, tt.cookieValue)
 			w := httptest.NewRecorder()
 			app.ServeHTTP(w, req)
 			if w.Code != http.StatusUnauthorized {
