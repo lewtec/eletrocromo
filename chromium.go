@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os/exec"
-
-	"github.com/jasonlovesdoggo/gopen"
 )
 
 var chromiumLikes = []string{
@@ -57,7 +55,9 @@ func LaunchChromium(u *url.URL) error {
 	}
 	chromium, err := GetChromium()
 	if errors.Is(err, ErrNoChromium) {
-		return gopen.Open(u.String())
+		// httptest always serves on loopback; open with a helper that accepts
+		// 127.0.0.1 / localhost (many URL openers reject them).
+		return openSystemBrowser(u)
 	}
 	cmd := exec.Command(chromium, "--app", u.String())
 	return cmd.Start()
