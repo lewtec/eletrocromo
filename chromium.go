@@ -60,5 +60,12 @@ func LaunchChromium(u *url.URL) error {
 		return gopen.Open(u.String())
 	}
 	cmd := exec.Command(chromium, "--app", u.String())
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// Start does not release process resources; Wait must run eventually
+	// or a finished browser leaves a zombie. Reap in the background so
+	// launch stays non-blocking (caller does not wait for the UI process).
+	go func() { _ = cmd.Wait() }()
+	return nil
 }
