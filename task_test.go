@@ -61,3 +61,15 @@ func TestNewBrowserLaunchTask_RejectsNonHTTPScheme(t *testing.T) {
 		t.Fatal("expected scheme error")
 	}
 }
+
+// Cancelled context must short-circuit before LaunchChromium (no browser spawn).
+func TestNewBrowserLaunchTask_RespectsCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	task := NewBrowserLaunchTask("http://127.0.0.1:9/")
+	err := task.Run(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want context.Canceled", err)
+	}
+}

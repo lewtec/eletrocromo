@@ -35,6 +35,11 @@ func NewKeepAliveTask(d time.Duration) Task {
 
 func NewBrowserLaunchTask(urlStr string) Task {
 	return FunctionTask(func(ctx context.Context) error {
+		// Task requires respecting cancellation; do not open a browser
+		// after App.Run has already begun shutdown.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		u, err := url.Parse(urlStr)
 		if err != nil {
 			return err
