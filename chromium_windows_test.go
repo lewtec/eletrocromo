@@ -2,16 +2,14 @@
 
 package eletrocromo
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestChromiumLikes_IncludesWindowsInstallPaths(t *testing.T) {
-	want := []string{
-		`C:\Program Files\Google\Chrome\Application\chrome.exe`,
-		`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
-		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
-		`C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe`,
-		`C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe`,
-	}
+	// Integration: init() prepended windowsExtraChromiumLikes into chromiumLikes.
+	want := windowsExtraChromiumLikes(os.Getenv("LOCALAPPDATA"))
 	have := make(map[string]struct{}, len(chromiumLikes))
 	for _, name := range chromiumLikes {
 		have[name] = struct{}{}
