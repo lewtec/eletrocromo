@@ -21,3 +21,17 @@ func TestChromiumLikes_IncludesLinuxPackageNames(t *testing.T) {
 		}
 	}
 }
+
+func TestChromiumLikes_IncludesLinuxAbsolutePaths(t *testing.T) {
+	// Integration: init() prepended linuxExtraChromiumLikes into chromiumLikes.
+	want := linuxExtraChromiumLikes()
+	have := make(map[string]struct{}, len(chromiumLikes))
+	for _, name := range chromiumLikes {
+		have[name] = struct{}{}
+	}
+	for _, name := range want {
+		if _, ok := have[name]; !ok {
+			t.Errorf("chromiumLikes missing Linux install path %q", name)
+		}
+	}
+}
