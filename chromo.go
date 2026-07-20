@@ -93,10 +93,15 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // Startup Sequence:
 //  1. Generates a new random AuthToken if one is not already set.
-//  2. Starts an internal HTTP server (using httptest.Server for simplified port management).
-//  3. Launches the Chromium browser pointing to the server's URL with the auth token.
-//  4. Blocks until the application context is cancelled, then waits for background
+//  2. Resolves Helium (local PATH or workspaced ensure) — before binding any port.
+//  3. Starts the internal HTTP server (httptest for ephemeral loopback bind).
+//  4. Launches Helium with --app pointing at the server URL + auth token.
+//  5. Blocks until the application context is cancelled, then waits for background
 //     tasks and shuts down the server.
+//
+// Ensure runs synchronously on the startup path so a missing/unresolvable host
+// fails Run before the webserver is advertised. Launch still uses Start() so
+// the browser process is not waited on here (window-owned lifetime is later).
 func (a *App) Run() error {
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
@@ -112,6 +117,16 @@ func (a *App) Run() error {
 	prevCtx := a.Context
 	a.Context = ctx
 	defer func() { a.Context = prevCtx }()
+
+	// Resolve Helium first: ensure can take a long time (download workspaced +
+	// helium-browser). Do not open a listening server until we know we can
+	// open a window; failures must not leave a loopback port up with a token.
+	log.Printf("resolving Helium host…")
+	bin, err := resolveBrowserHost(ctx)
+	if err != nil {
+		return err
+	}
+	log.Printf("Helium host: %s", bin)
 
 	ts := httptest.NewUnstartedServer(a)
 	ts.Config.BaseContext = func(_ net.Listener) context.Context {
@@ -130,8 +145,10 @@ func (a *App) Run() error {
 	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
 	log.Printf("webserver started on %s", link)
 
-	if err := a.BackgroundRun(NewBrowserLaunchTask(link)); err != nil {
-		return err
+	if err := launchAppWindow(bin, link); err != nil {
+		cancel()
+		a.WaitGroup.Wait()
+		return fmt.Errorf("launch Helium: %w", err)
 	}
 
 	<-ctx.Done()

@@ -39,6 +39,9 @@ func GetChromium() (string, error) {
 	return "", ErrNoChromium
 }
 
+// resolveBrowserHost is the host-resolve implementation; tests may override.
+var resolveBrowserHost = ResolveBrowserHost
+
 // ResolveBrowserHost finds Helium for --app launch.
 //
 // Order (SPEC): local Helium → ensure via workspaced (tool which helium-browser
@@ -65,19 +68,31 @@ func ensureDisabled() bool {
 	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
 }
 
-// LaunchChromium opens the URL in Helium app mode (--app).
-// Host resolution follows ResolveBrowserHost (uses ctx for ensure only).
-// Only http(s) schemes are allowed.
+// launchAppWindow starts bin with --app pointing at rawURL (http/https only).
+func launchAppWindow(bin, rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("invalid URL scheme: %s", u.Scheme)
+	}
+	// Start without binding browser lifetime to a context yet; window-owned
+	// process wait is a later SPEC item.
+	cmd := exec.Command(bin, "--app", u.String())
+	return cmd.Start()
+}
+
+// LaunchChromium resolves Helium then opens the URL in app mode (--app).
+// App.Run prefers ResolveBrowserHost once, then launchAppWindow, so ensure
+// is not deferred until after the server is up.
 func LaunchChromium(ctx context.Context, u *url.URL) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("invalid URL scheme: %s", u.Scheme)
 	}
-	bin, err := ResolveBrowserHost(ctx)
+	bin, err := resolveBrowserHost(ctx)
 	if err != nil {
 		return err
 	}
-	// Start without binding the browser lifetime to ctx yet; window-owned
-	// process wait is a later SPEC item. Ensure still respects ctx.
-	cmd := exec.Command(bin, "--app", u.String())
-	return cmd.Start()
+	return launchAppWindow(bin, u.String())
 }
