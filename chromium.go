@@ -1,6 +1,7 @@
 package eletrocromo
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // heliumCandidates are local Helium binary names (workspaced registry bin: helium).
@@ -18,6 +20,13 @@ var heliumCandidates = []string{
 // ErrNoChromium is returned when Helium cannot be resolved (local PATH or
 // workspaced ensure of registry helium-browser).
 var ErrNoChromium = errors.New("no Helium browser host found")
+
+// ErrHeliumLaunch is returned when the Helium process fails to stay up after Start.
+var ErrHeliumLaunch = errors.New("helium failed to launch")
+
+// heliumStartupGrace is how long we wait for the process to prove it stays up.
+// Immediate crash (bad flags, missing libs, wrapper exit) surfaces as Run error.
+var heliumStartupGrace = 2 * time.Second
 
 // lookPath is exec.LookPath; tests may override.
 var lookPath = exec.LookPath
@@ -68,24 +77,97 @@ func ensureDisabled() bool {
 	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
 }
 
-// launchAppWindow starts bin with --app pointing at rawURL (http/https only).
-func launchAppWindow(bin, rawURL string) error {
+// appWindow is a started Helium process with a single Wait owner.
+type appWindow struct {
+	cmd    *exec.Cmd
+	stderr bytes.Buffer
+	waitc  chan error // closed after Wait; holds Wait result
+}
+
+// startAppWindow starts Helium with an isolated user-data-dir and --app URL.
+func startAppWindow(bin, rawURL, userDataDir string) (*appWindow, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("invalid URL scheme: %s", u.Scheme)
+		return nil, fmt.Errorf("invalid URL scheme: %s", u.Scheme)
 	}
-	// Start without binding browser lifetime to a context yet; window-owned
-	// process wait is a later SPEC item.
-	cmd := exec.Command(bin, "--app", u.String())
-	return cmd.Start()
+	if userDataDir == "" {
+		return nil, fmt.Errorf("user data dir is required")
+	}
+	w := &appWindow{waitc: make(chan error, 1)}
+	// Chromium-family app window + dedicated profile so apps do not share
+	// cookies/sessions or steal each other's windows.
+	w.cmd = exec.Command(bin,
+		"--user-data-dir="+userDataDir,
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--app="+u.String(),
+	)
+	w.cmd.Stderr = &w.stderr
+	// Drop stdout noise from Chromium; keep stderr for launch diagnostics.
+	w.cmd.Stdout = nil
+	if err := w.cmd.Start(); err != nil {
+		return nil, err
+	}
+	go func() {
+		w.waitc <- w.cmd.Wait()
+	}()
+	return w, nil
+}
+
+// awaitStartup returns an error if Helium exits within grace (failed launch).
+// If still running after grace, returns nil; call watchExit to reap later.
+func (w *appWindow) awaitStartup(grace time.Duration) error {
+	if grace <= 0 {
+		grace = heliumStartupGrace
+	}
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	select {
+	case err := <-w.waitc:
+		return wrapHeliumExit(err, &w.stderr)
+	case <-timer.C:
+		return nil
+	}
+}
+
+// watchExit invokes onExit once when the process exits (successful or not).
+// Must only be called after awaitStartup returned nil (process still running).
+func (w *appWindow) watchExit(onExit func(error)) {
+	go func() {
+		err := <-w.waitc
+		if onExit != nil {
+			onExit(err)
+		}
+	}()
+}
+
+func wrapHeliumExit(err error, stderr *bytes.Buffer) error {
+	msg := ""
+	if stderr != nil {
+		msg = strings.TrimSpace(stderr.String())
+		// Chromium spam can be huge; keep a useful tail.
+		if len(msg) > 512 {
+			msg = "…" + msg[len(msg)-512:]
+		}
+	}
+	if err == nil {
+		if msg != "" {
+			return fmt.Errorf("%w: process exited immediately (%s)", ErrHeliumLaunch, msg)
+		}
+		return fmt.Errorf("%w: process exited immediately", ErrHeliumLaunch)
+	}
+	if msg != "" {
+		return fmt.Errorf("%w: %v (%s)", ErrHeliumLaunch, err, msg)
+	}
+	return fmt.Errorf("%w: %w", ErrHeliumLaunch, err)
 }
 
 // LaunchChromium resolves Helium then opens the URL in app mode (--app).
-// App.Run prefers ResolveBrowserHost once, then launchAppWindow, so ensure
-// is not deferred until after the server is up.
+// Uses a temporary profile under the OS temp dir when no App.ID is available;
+// prefer App.Run which uses reverse-domain profile isolation.
 func LaunchChromium(ctx context.Context, u *url.URL) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("invalid URL scheme: %s", u.Scheme)
@@ -94,5 +176,18 @@ func LaunchChromium(ctx context.Context, u *url.URL) error {
 	if err != nil {
 		return err
 	}
-	return launchAppWindow(bin, u.String())
+	dir, err := os.MkdirTemp("", "eletrocromo-launch-*")
+	if err != nil {
+		return err
+	}
+	w, err := startAppWindow(bin, u.String(), dir)
+	if err != nil {
+		return err
+	}
+	if err := w.awaitStartup(heliumStartupGrace); err != nil {
+		return err
+	}
+	// Detached for this helper: reap when process dies, ignore result.
+	w.watchExit(func(error) {})
+	return nil
 }

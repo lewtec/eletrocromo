@@ -169,6 +169,16 @@ func TestLaunchChromium_NoSystemBrowserFallback(t *testing.T) {
 	}
 }
 
+func TestRun_RequiresAppID(t *testing.T) {
+	app := App{
+		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		Context: context.Background(),
+	}
+	if err := app.Run(); err == nil {
+		t.Fatal("expected error for missing App.ID")
+	}
+}
+
 func TestRun_ResolveFailsBeforeServer(t *testing.T) {
 	orig := resolveBrowserHost
 	t.Cleanup(func() { resolveBrowserHost = orig })
@@ -178,6 +188,7 @@ func TestRun_ResolveFailsBeforeServer(t *testing.T) {
 	}
 
 	app := App{
+		ID:      "br.tec.lew.test.resolve",
 		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
 		Context: context.Background(),
 	}
@@ -190,29 +201,74 @@ func TestRun_ResolveFailsBeforeServer(t *testing.T) {
 	}
 }
 
-func TestRun_ResolvesThenLaunches(t *testing.T) {
-	orig := resolveBrowserHost
-	t.Cleanup(func() { resolveBrowserHost = orig })
+func TestRun_ImmediateHeliumExitIsError(t *testing.T) {
+	origResolve := resolveBrowserHost
+	origGrace := heliumStartupGrace
+	t.Cleanup(func() {
+		resolveBrowserHost = origResolve
+		heliumStartupGrace = origGrace
+	})
+	heliumStartupGrace = 500 * time.Millisecond
 
-	var resolved atomic.Bool
 	trueBin, err := exec.LookPath("true")
 	if err != nil {
 		t.Skip("no true binary")
 	}
 	resolveBrowserHost = func(context.Context) (string, error) {
-		resolved.Store(true)
 		return trueBin, nil
+	}
+
+	app := App{
+		ID:      "br.tec.lew.test.exit",
+		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		Context: context.Background(),
+	}
+	err = app.Run()
+	if err == nil {
+		t.Fatal("expected ErrHeliumLaunch when host exits immediately")
+	}
+	if !errors.Is(err, ErrHeliumLaunch) {
+		t.Fatalf("want ErrHeliumLaunch, got %v", err)
+	}
+}
+
+func TestRun_ResolvesThenLaunches(t *testing.T) {
+	origResolve := resolveBrowserHost
+	origGrace := heliumStartupGrace
+	t.Cleanup(func() {
+		resolveBrowserHost = origResolve
+		heliumStartupGrace = origGrace
+	})
+	// Short grace; sleep stays up long enough.
+	heliumStartupGrace = 200 * time.Millisecond
+
+	var resolved atomic.Bool
+	sleepBin, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skip("no sleep binary")
+	}
+	// Wrapper script: sleep ignores --user-data-dir flags if we pass sleep as bin
+	// because chromium args are wrong for sleep. Use a shell script as host.
+	script := filepath.Join(t.TempDir(), "fake-helium")
+	body := "#!/bin/sh\nexec sleep 60\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = sleepBin
+	resolveBrowserHost = func(context.Context) (string, error) {
+		resolved.Store(true)
+		return script, nil
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// Cancel shortly after Run enters the wait loop (post-launch).
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(400 * time.Millisecond)
 		cancel()
 	}()
 
 	app := App{
+		ID:      "br.tec.lew.test.launch",
 		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
 		Context: ctx,
 	}

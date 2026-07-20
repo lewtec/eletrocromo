@@ -96,6 +96,7 @@ func main() {
 	})
 
 	app := eletrocromo.App{
+		ID:      "br.tec.lew.eletrocromo.counter",
 		Handler: mux,
 		Context: ctx,
 	}

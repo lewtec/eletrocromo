@@ -19,6 +19,7 @@ func main() {
 	defer stop()
 
 	app := eletrocromo.App{
+		ID: "br.tec.lew.eletrocromo.basic",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprintf(w, "it works!")
 		}),

@@ -101,8 +101,10 @@ The app does **not** own bind as the source of truth. If `Server.Addr` is set, t
 | Bind | Loopback only (`127.0.0.1` / `localhost`, and `::1` if used). Never `0.0.0.0` / LAN as default or silent behavior. |
 | Auth | Always on. Mint token if unset; fail-closed when missing/invalid. |
 | Auth UX | Initial URL may carry `?token=…`; set HttpOnly cookie; subsequent requests use cookie. |
-| UI open | **App window** via Helium only + `--app`. **No** Chrome/Edge/system browser. |
+| UI open | **App window** via Helium only + `--app` + per-app `--user-data-dir`. **No** Chrome/Edge/system browser. |
 | Host resolve | Local Helium → ensure Helium via workspaced → hard error if still missing. |
+| App identity | Required reverse-domain `App.ID` (e.g. `br.tec.lew.myapp`) for profile isolation and future APK package name. |
+| Launch failure | If Helium exits during startup grace, `Run` returns an error (not ignored). Later Helium exit cancels the app. |
 | Scheme | Only `http` / `https` for launch URLs. |
 | Lifecycle | See modes below. |
 | Background work | Existing task/`WaitGroup` style coordination remains valid for app-scheduled work. |

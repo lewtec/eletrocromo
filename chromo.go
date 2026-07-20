@@ -17,6 +17,11 @@ import (
 // authentication state, and the internal web server.
 // It coordinates background tasks and ensures graceful shutdown.
 type App struct {
+	// ID is the reverse-domain application identity (e.g. "br.tec.lew.counter").
+	// Required. Isolates the Helium --user-data-dir per app and is the intended
+	// APK package name when packaging is added later.
+	ID string
+
 	Handler   http.Handler
 	AuthToken string
 	WaitGroup sync.WaitGroup
@@ -92,17 +97,23 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Run starts the application and blocks until the context is cancelled.
 //
 // Startup Sequence:
-//  1. Generates a new random AuthToken if one is not already set.
-//  2. Resolves Helium (local PATH or workspaced ensure) — before binding any port.
-//  3. Starts the internal HTTP server (httptest for ephemeral loopback bind).
-//  4. Launches Helium with --app pointing at the server URL + auth token.
-//  5. Blocks until the application context is cancelled, then waits for background
-//     tasks and shuts down the server.
-//
-// Ensure runs synchronously on the startup path so a missing/unresolvable host
-// fails Run before the webserver is advertised. Launch still uses Start() so
-// the browser process is not waited on here (window-owned lifetime is later).
+//  1. Validates App.ID (reverse-domain) and prepares an isolated Helium profile.
+//  2. Generates a new random AuthToken if one is not already set.
+//  3. Resolves Helium (local PATH or workspaced ensure) — before binding any port.
+//  4. Starts the internal HTTP server (httptest for ephemeral loopback bind).
+//  5. Launches Helium with --user-data-dir + --app; fails Run if the process
+//     exits during a short startup grace (launch failures are not ignored).
+//  6. Blocks until the context is cancelled (including Helium exit), then waits
+//     for background tasks and shuts down the server.
 func (a *App) Run() error {
+	if err := ValidateAppID(a.ID); err != nil {
+		return err
+	}
+	profileDir, err := ProfileDir(a.ID)
+	if err != nil {
+		return err
+	}
+
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
 	}
@@ -126,7 +137,7 @@ func (a *App) Run() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Helium host: %s", bin)
+	log.Printf("Helium host: %s (profile %s)", bin, profileDir)
 
 	ts := httptest.NewUnstartedServer(a)
 	ts.Config.BaseContext = func(_ net.Listener) context.Context {
@@ -145,11 +156,26 @@ func (a *App) Run() error {
 	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
 	log.Printf("webserver started on %s", link)
 
-	if err := launchAppWindow(bin, link); err != nil {
+	win, err := startAppWindow(bin, link, profileDir)
+	if err != nil {
 		cancel()
 		a.WaitGroup.Wait()
 		return fmt.Errorf("launch Helium: %w", err)
 	}
+	if err := win.awaitStartup(heliumStartupGrace); err != nil {
+		cancel()
+		a.WaitGroup.Wait()
+		return err
+	}
+	// After a healthy start, Helium exit cancels the app (window-owned lite).
+	win.watchExit(func(exitErr error) {
+		if exitErr != nil {
+			log.Printf("Helium exited: %v", exitErr)
+		} else {
+			log.Printf("Helium exited")
+		}
+		cancel()
+	})
 
 	<-ctx.Done()
 	a.WaitGroup.Wait()

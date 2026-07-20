@@ -8,15 +8,18 @@ See [SPEC.md](SPEC.md) for the product contract.
 ## Architecture
 
 On start, eletrocromo wraps your `http.Handler` with always-on token auth, binds
-loopback, and opens the UI with Helium `--app`:
+loopback, and opens the UI with Helium `--app` and a **per-app profile**:
 
-1. **Helium** on `PATH`
-2. Else ensure Helium via **workspaced** (`tool which helium-browser helium`),
-   bootstrapping a pinned workspaced binary into the user cache if needed
-3. If still missing → **error** (never Chrome/Edge/system browser)
+1. Require reverse-domain `App.ID` (e.g. `br.tec.lew.myapp`) → isolated
+   `--user-data-dir` under the OS data dir (`…/eletrocromo/profiles/<id>`)
+2. **Helium** on `PATH`, else ensure via **workspaced**
+   (`tool which helium-browser helium`), bootstrapping workspaced if needed
+3. Start server only after Helium resolves; fail if Helium exits on startup
+4. Never Chrome/Edge/system browser
 
 ```go
 app := eletrocromo.App{
+    ID:      "br.tec.lew.myapp", // reverse-domain; also future APK package name
     Handler: myHandler,
     Context: ctx, // cancel to shut down
 }
