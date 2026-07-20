@@ -3,13 +3,16 @@ package eletrocromo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestLaunchChromium_RejectsNonHTTPSchemes(t *testing.T) {
@@ -163,6 +166,61 @@ func TestLaunchChromium_NoSystemBrowserFallback(t *testing.T) {
 	}
 	if !errors.Is(err, ErrNoChromium) {
 		t.Fatalf("want ErrNoChromium, got %v", err)
+	}
+}
+
+func TestRun_ResolveFailsBeforeServer(t *testing.T) {
+	orig := resolveBrowserHost
+	t.Cleanup(func() { resolveBrowserHost = orig })
+
+	resolveBrowserHost = func(context.Context) (string, error) {
+		return "", fmt.Errorf("%w: test deny", ErrNoChromium)
+	}
+
+	app := App{
+		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		Context: context.Background(),
+	}
+	err := app.Run()
+	if err == nil {
+		t.Fatal("expected resolve error from Run")
+	}
+	if !errors.Is(err, ErrNoChromium) {
+		t.Fatalf("want ErrNoChromium, got %v", err)
+	}
+}
+
+func TestRun_ResolvesThenLaunches(t *testing.T) {
+	orig := resolveBrowserHost
+	t.Cleanup(func() { resolveBrowserHost = orig })
+
+	var resolved atomic.Bool
+	trueBin, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("no true binary")
+	}
+	resolveBrowserHost = func(context.Context) (string, error) {
+		resolved.Store(true)
+		return trueBin, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Cancel shortly after Run enters the wait loop (post-launch).
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	app := App{
+		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		Context: ctx,
+	}
+	if err := app.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.Load() {
+		t.Fatal("resolveBrowserHost was not called")
 	}
 }
 
