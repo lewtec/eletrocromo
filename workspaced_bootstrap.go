@@ -9,11 +9,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // Pinned workspaced release used when bootstrapping the ensure helper.
@@ -35,13 +37,32 @@ var workspacedAssetSHA256 = map[string]string{
 	"workspaced_Windows_x86_64.zip":   "979ff0ab8cdd78f0dcc32838eab3d6c41855ace48edb5f816f5eb59e92a23756",
 }
 
-// httpGet is http.DefaultClient.Do wrapper; tests may override.
+// bootstrapHTTP is used for release downloads. No overall Timeout (large
+// assets may take a while); ResponseHeaderTimeout and body idle timeout
+// catch stuck connections.
+var bootstrapHTTP = &http.Client{
+	Transport: &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          4,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   30 * time.Second,
+		ResponseHeaderTimeout: 60 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	},
+}
+
+// httpGet is bootstrapHTTP.Do wrapper; tests may override.
 var httpGet = func(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	return http.DefaultClient.Do(req)
+	return bootstrapHTTP.Do(req)
 }
 
 func workspacedAssetName() (string, error) {
@@ -129,10 +150,13 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 	}
 	h := sha256.New()
 	w := io.MultiWriter(f, h)
-	if _, err := io.Copy(w, resp.Body); err != nil {
+	body := newIdleTimeoutReader(resp.Body, downloadIdleTimeout)
+	if _, err := io.Copy(w, body); err != nil {
 		f.Close()
+		_ = body.Close()
 		return "", fmt.Errorf("bootstrap workspaced: write archive: %w", err)
 	}
+	_ = body.Close()
 	if err := f.Close(); err != nil {
 		return "", err
 	}
