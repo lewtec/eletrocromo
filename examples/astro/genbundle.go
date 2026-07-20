@@ -13,7 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"orvalho/pkg/workers/bundle"
+	"github.com/lucasew/orvalho/pkg/workers/bundle"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"orvalho/pkg/workers"
+	"github.com/lucasew/orvalho/pkg/workers"
 )
 
 func TestEmbeddedGuestServesHome(t *testing.T) {

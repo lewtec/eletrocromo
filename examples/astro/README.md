@@ -18,7 +18,7 @@ binary after a pre-bundle step (no runtime esbuild).
 ## Prerequisites
 
 - [mise](https://mise.jdx.dev/) — [`mise.toml`](./mise.toml) (`bun`; go from parent mise)
-- Local [orvalho](https://github.com/lucasew/orvalho) checkout (see `go.mod` `replace`)
+- [orvalho](https://github.com/lucasew/orvalho) (`github.com/lucasew/orvalho`)
 
 ## Run
 

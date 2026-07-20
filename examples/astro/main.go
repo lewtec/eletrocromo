@@ -16,7 +16,7 @@ import (
 	"os/signal"
 
 	"github.com/lewtec/eletrocromo"
-	"orvalho/pkg/workers"
+	"github.com/lucasew/orvalho/pkg/workers"
 )
 
 //go:embed embed/guest.js
