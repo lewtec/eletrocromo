@@ -1,7 +1,13 @@
 package eletrocromo
 
 import (
+	"context"
+	"errors"
+	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -19,7 +25,7 @@ func TestLaunchChromium_RejectsNonHTTPSchemes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse: %v", err)
 			}
-			err = LaunchChromium(u)
+			err = LaunchChromium(context.Background(), u)
 			if err == nil {
 				t.Fatal("expected error for non-http(s) scheme")
 			}
@@ -38,7 +44,180 @@ func TestGetChromium_NoPanic(t *testing.T) {
 		}
 		return
 	}
-	if err != ErrNoChromium {
+	if !errors.Is(err, ErrNoChromium) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGetChromium_PrefersHelium(t *testing.T) {
+	orig := lookPath
+	t.Cleanup(func() { lookPath = orig })
+
+	lookPath = func(file string) (string, error) {
+		switch file {
+		case "helium":
+			return "/fake/helium", nil
+		case "chromium", "chrome", "google-chrome":
+			return "/fake/" + file, nil
+		default:
+			return "", exec.ErrNotFound
+		}
+	}
+	path, err := GetChromium()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/fake/helium" {
+		t.Fatalf("want helium first, got %q", path)
+	}
+}
+
+func TestGetChromium_SecondaryWhenNoHelium(t *testing.T) {
+	orig := lookPath
+	t.Cleanup(func() { lookPath = orig })
+
+	lookPath = func(file string) (string, error) {
+		if file == "chromium" {
+			return "/usr/bin/chromium", nil
+		}
+		return "", exec.ErrNotFound
+	}
+	path, err := GetChromium()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/usr/bin/chromium" {
+		t.Fatalf("got %q", path)
+	}
+}
+
+func TestResolveBrowserHost_NoEnsureNoHost(t *testing.T) {
+	orig := lookPath
+	t.Cleanup(func() { lookPath = orig })
+	lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+
+	t.Setenv("ELETROCROMO_NO_ENSURE", "1")
+	_, err := ResolveBrowserHost(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, ErrNoChromium) {
+		t.Fatalf("want ErrNoChromium, got %v", err)
+	}
+	if strings.Contains(err.Error(), "xdg-open") || strings.Contains(strings.ToLower(err.Error()), "system browser") {
+		t.Fatalf("must not mention system browser fallback: %v", err)
+	}
+}
+
+func TestResolveBrowserHost_EnsureViaWorkspacedWhich(t *testing.T) {
+	origLook := lookPath
+	origCmd := commandOutput
+	t.Cleanup(func() {
+		lookPath = origLook
+		commandOutput = origCmd
+	})
+
+	// No local browser; workspaced on PATH.
+	lookPath = func(file string) (string, error) {
+		if file == "workspaced" {
+			return "/bin/workspaced", nil
+		}
+		return "", exec.ErrNotFound
+	}
+	t.Setenv("ELETROCROMO_NO_ENSURE", "")
+	_ = os.Unsetenv("ELETROCROMO_NO_ENSURE")
+	t.Setenv("ELETROCROMO_WORKSPACED", "")
+
+	var gotArgs []string
+	commandOutput = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		gotArgs = append([]string{name}, args...)
+		return []byte("/cache/tools/helium\n"), nil
+	}
+
+	path, err := ResolveBrowserHost(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/cache/tools/helium" {
+		t.Fatalf("got path %q", path)
+	}
+	want := []string{"/bin/workspaced", "tool", "which", "helium-browser", "helium"}
+	if len(gotArgs) != len(want) {
+		t.Fatalf("args %v want %v", gotArgs, want)
+	}
+	for i := range want {
+		if gotArgs[i] != want[i] {
+			t.Fatalf("args %v want %v", gotArgs, want)
+		}
+	}
+}
+
+func TestLaunchChromium_NoSystemBrowserFallback(t *testing.T) {
+	orig := lookPath
+	t.Cleanup(func() { lookPath = orig })
+	lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	t.Setenv("ELETROCROMO_NO_ENSURE", "1")
+
+	u, err := url.Parse("http://127.0.0.1:9/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = LaunchChromium(context.Background(), u)
+	if err == nil {
+		t.Fatal("expected error without host")
+	}
+	if !errors.Is(err, ErrNoChromium) {
+		t.Fatalf("want ErrNoChromium, got %v", err)
+	}
+}
+
+func TestWorkspacedAssetName_LinuxAmd64(t *testing.T) {
+	// Smoke: function returns a known key for this process GOOS/GOARCH.
+	name, err := workspacedAssetName()
+	if err != nil {
+		// Unsupported OS/ARCH in some CI is fine to skip.
+		t.Skip(err)
+	}
+	if _, ok := workspacedAssetSHA256[name]; !ok {
+		t.Fatalf("asset %q missing from pinned checksums", name)
+	}
+	if !strings.HasPrefix(name, "workspaced_") {
+		t.Fatalf("unexpected name %q", name)
+	}
+}
+
+func TestBootstrapSkipsDownloadWhenCached(t *testing.T) {
+	dir := t.TempDir()
+	// Point cache at temp by shadowing via env is hard; call extract path indirectly
+	// by placing a fake binary where workspacedCacheDir would — instead unit-test
+	// only that existing bin short-circuits by using a custom cache through
+	// temporary HOME/XDG_CACHE_HOME.
+	t.Setenv("XDG_CACHE_HOME", dir)
+	// UserCacheDir on Linux uses XDG_CACHE_HOME when set.
+	cache, err := workspacedCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(cache, "workspaced")
+	if err := os.WriteFile(bin, []byte("#!/bin/true\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origGet := httpGet
+	t.Cleanup(func() { httpGet = origGet })
+	httpGet = func(context.Context, string) (*http.Response, error) {
+		t.Fatal("httpGet should not be called when binary is cached")
+		return nil, nil
+	}
+
+	path, err := bootstrapWorkspaced(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != bin {
+		t.Fatalf("got %q want %q", path, bin)
 	}
 }

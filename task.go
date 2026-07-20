@@ -39,6 +39,6 @@ func NewBrowserLaunchTask(urlStr string) Task {
 		if err != nil {
 			return err
 		}
-		return LaunchChromium(u)
+		return LaunchChromium(ctx, u)
 	})
 }
