@@ -2,9 +2,11 @@ module github.com/lewtec/eletrocromo/examples/astro
 
 go 1.25.4
 
+replace github.com/lewtec/eletrocromo => ../..
+
 require (
 	github.com/lewtec/eletrocromo v0.0.0
-	orvalho v0.0.0
+	github.com/lucasew/orvalho v0.0.0-20260720233020-b4936fd61914
 )
 
 require (
@@ -15,9 +17,3 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 )
-
-replace github.com/lewtec/eletrocromo => ../..
-
-// Local checkout of https://github.com/lucasew/orvalho (module path is "orvalho").
-// Adjust if your layout differs from WORKSPACE/{LEWTEC/eletrocromo,OPENSOURCE-own/orvalho}.
-replace orvalho => ../../../../OPENSOURCE-own/orvalho
