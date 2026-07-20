@@ -13,7 +13,7 @@ A pure-Go process owns the HTTP app; eletrocromo binds loopback, gates access, o
 - Ship desktop apps as **CGo-less Go binaries** whose UI is a normal webapp talking to a **server on the same device**.
 - Let the app focus on an `http.Handler` or `*http.Server`; the library handles bind, auth handshake, window launch, and process lifetime modes.
 - On **Linux (v1 bar)**: window-owned lifetime by default; optional background mode with **tray Open/Quit** so the user never retypes a token URL.
-- Stay thin: the window is **Helium** (or another already-installed Chromium-like as a secondary discover path), not a native toolkit.
+- Stay thin: the window is **Helium only**, not a native toolkit and not “whatever Chromium is on PATH.”
 - Prefer **[Helium](https://helium.computer/)** as the desktop shell: privacy-oriented Chromium fork that still supports `--app` app windows.
 - **Ensure** Helium when missing via **[workspaced](https://github.com/lucasew/workspaced)** (registry tool `helium-browser`), including bootstrapping the workspaced binary if needed — without vendoring browser blobs in this module.
 
@@ -101,46 +101,37 @@ The app does **not** own bind as the source of truth. If `Server.Addr` is set, t
 | Bind | Loopback only (`127.0.0.1` / `localhost`, and `::1` if used). Never `0.0.0.0` / LAN as default or silent behavior. |
 | Auth | Always on. Mint token if unset; fail-closed when missing/invalid. |
 | Auth UX | Initial URL may carry `?token=…`; set HttpOnly cookie; subsequent requests use cookie. |
-| UI open | **App window** via Helium (or secondary already-installed Chromium-like) + `--app`. **No** system default browser. |
-| Host resolve | Discover local → ensure Helium via workspaced → hard error if still missing. |
+| UI open | **App window** via Helium only + `--app`. **No** Chrome/Edge/system browser. |
+| Host resolve | Local Helium → ensure Helium via workspaced → hard error if still missing. |
 | Scheme | Only `http` / `https` for launch URLs. |
 | Lifecycle | See modes below. |
 | Background work | Existing task/`WaitGroup` style coordination remains valid for app-scheduled work. |
 
-### Desktop window surface: Helium-first, Chromium `--app` only
+### Desktop window surface: Helium only
 
-On desktop, the UI is an app-mode window launched with `--app=<url>`. The **product focus** is **[Helium](https://helium.computer/)** (Chromium-based; supports Chromium app-window flags).
+On desktop, the UI is an app-mode window launched with `--app=<url>` on **[Helium](https://helium.computer/)** only (Chromium-based engine; we do not discover other browsers).
 
 | Path | Priority | Behavior |
 |------|----------|----------|
-| **Helium** (local) | 1 | `helium` on `PATH` / known install paths |
-| Other Chromium-likes | 2 | Already-installed Chrome/Chromium/Edge/Brave/… only; **no** ensure for these |
-| **Helium via workspaced** | 3 | Ensure registry tool `helium-browser`, binary `helium` (see pipeline) |
-| System default browser | **Forbidden** | Never `xdg-open` / OS URL opener as substitute |
-| Firefox / Gecko | **Forbidden** | Never on discovery list |
+| **Helium** (local) | 1 | `helium` on `PATH` |
+| **Helium via workspaced** | 2 | Ensure registry tool `helium-browser`, binary `helium` |
+| Chrome / Chromium / Edge / Brave / … | **Forbidden** | Not on the discovery list |
+| System default browser | **Forbidden** | Never `xdg-open` / OS URL opener |
+| Firefox / Gecko | **Forbidden** | Never |
 
 **Normative constraints:**
 
-- **No system-browser fallback.** After the resolve/ensure pipeline fails, `Run` / launch returns a clear error. Never open a full tabbed browser with the token URL.
-- **Helium is dogfood and quality bar** for Linux v1.
-- **No Firefox** app-window path or extension/profile hacks.
-- Browser bits live in **workspaced’s tool store** (or a pre-existing install), not inside the eletrocromo module tree.
+- **Helium-only.** No secondary Chromium-like discover path.
+- **No system-browser fallback.** After the resolve/ensure pipeline fails, `Run` / launch returns a clear error.
+- Browser bits live in **workspaced’s tool store** (or a pre-existing Helium install), not inside the eletrocromo module tree.
 
 ### Host resolve / ensure pipeline
 
-Ordered steps for obtaining a Chromium-like binary that will run with `--app`:
-
 ```text
 1. Local Helium
-   LookPath("helium") and known Helium install paths.
-   If found → use it.
+   LookPath("helium"). If found → use it.
 
-2. Local secondary Chromium-likes (optional convenience)
-   Existing discovery list (chrome, chromium, edge, brave, …).
-   If found → use it.
-   Do not download these.
-
-3. Ensure Helium via workspaced
+2. Ensure Helium via workspaced
    a. Locate workspaced binary:
       - LookPath("workspaced"), else
       - cached bootstrap under XDG cache (e.g. ~/.cache/eletrocromo/workspaced/<pinned-version>/workspaced), else
@@ -153,9 +144,9 @@ Ordered steps for obtaining a Chromium-like binary that will run with `--app`:
       Binary name: **helium**.
    c. Use the printed absolute path.
 
-4. Fail closed
+3. Fail closed
    Return an error that explains: need Helium, or network/workspaced ensure failed.
-   Never fall back to the system default browser.
+   Never fall back to Chrome or the system default browser.
 ```
 
 **Launch** (always, once a binary path is chosen):
@@ -172,7 +163,7 @@ Use **`tool which`** (not only `tool with`) so eletrocromo **owns** the browser 
 |--------|----------|
 | Ensure when Helium/secondary missing | **On** for normal desktop `Run` (product magic on first launch) |
 | Offline / ensure failure | Hard error; no degraded browser |
-| Prefer local | Steps 1–2 never hit the network |
+| Prefer local | Step 1 never hits the network |
 | Workspaced integration | **Subprocess CLI only** — do not import `github.com/lucasew/workspaced` as a library dependency of eletrocromo |
 | Registry vs GitHub ref | Always **`helium-browser`** (catalog/registry); multi-OS artifacts are workspaced’s job |
 | Home `lazy_tools.helium_browser` | Out of library path; users may still have personal shims, but ensure must not require them |
@@ -226,7 +217,7 @@ v1 is **complete** when all of the following hold:
 
 1. **Entry:** constructor/API for `http.Handler` and for `*http.Server`; library owns loopback bind.
 2. **Auth:** always on; documented handshake; fail-closed.
-3. **Launch:** Helium-first discovery; optional secondary Chromium discover; workspaced ensure of registry `helium-browser` (bootstrap workspaced if needed); `--app` only; **hard error** if still no host (no system-browser fallback).
+3. **Launch:** Helium only (PATH or workspaced ensure of `helium-browser`); `--app` only; **hard error** if still no host (no other browsers, no system fallback).
 4. **Default lifetime:** window close ⇒ process exit.
 5. **Background mode:** explicit flag; process outlives window.
 6. **Tray:** Open and Quit work without address-bar token ritual.
@@ -294,7 +285,7 @@ Exact API is an implementation detail as long as the contract above holds.
 | Entry | `App{Handler, Context, …}.Run()` | Handler **or** `*http.Server` constructors; bind always library-owned |
 | Server | `httptest` | Keep ephemeral loopback; do not hand bind to the app |
 | Auth | Token + cookie; fail-closed | Keep always-on; no opt-out in v1 |
-| Launch | `GetChromium` + `--app`; system open fallback | Helium → secondary discover → `workspaced tool which helium-browser helium` (bootstrap workspaced) → `--app`; **no** system browser |
+| Launch | multi Chromium-like list + system open | Helium only → `workspaced tool which helium-browser helium` (bootstrap workspaced) → `--app` |
 | Lifetime | Context cancel only; browser `Start` fire-and-forget | Default window-owned; flag background + tray |
 | Tray / lockfile | Absent | Linux v1 requirement |
 | Example | `examples/basic` | Add/replace with template counter + mode flag |
@@ -311,7 +302,7 @@ Exact API is an implementation detail as long as the contract above holds.
 
 ## Implementation order (toward full SPEC)
 
-1. **Launch contract:** Helium-first + secondary discover; remove system-browser fallback; hard error.
+1. **Launch contract:** Helium only; remove other Chromium-likes and system-browser fallback; hard error.
 2. **Ensure via workspaced on PATH:** `tool which helium-browser helium` → `--app`.
 3. **Bootstrap workspaced binary** (pinned + verified cache) when missing.
 4. Window-owned lifetime; background + tray + lockfile.
@@ -326,10 +317,9 @@ Resolved by engineering when building, not by re-litigating product meaning:
 - How window-death is detected under CGo-less constraints (browser process wait, WM heuristics, …)
 - Whether tray is a build-tagged Linux file set vs always compiled stubs
 - Precise constructor names and option functional options vs struct fields
-- Exact Helium path list per distro; which secondary Chromium names stay in the list
 - Workspaced release pin value, checksum source, and cache layout under XDG
 - Whether Helium catalog version is left floating to workspaced or pinned later
 
 ---
 
-*Aligned in grill session; amended for Helium-first shell, no system-browser fallback, and workspaced registry ensure (`helium-browser`). Do not expand scope into non-goals without a new explicit decision.*
+*Aligned in grill session; amended for Helium-only shell, workspaced registry ensure (`helium-browser`), no other Chromium-likes, no system-browser fallback. Do not expand scope into non-goals without a new explicit decision.*

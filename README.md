@@ -1,20 +1,19 @@
 # eletrocromo
 
 A simpler approach to desktop apps without Electron or Wails: pure Go HTTP
-handler + local loopback server + Chromium-style **app window** (Helium first).
+handler + local loopback server + **Helium** `--app` window.
 
 See [SPEC.md](SPEC.md) for the product contract.
 
 ## Architecture
 
 On start, eletrocromo wraps your `http.Handler` with always-on token auth, binds
-loopback, and opens the UI with `--app`:
+loopback, and opens the UI with Helium `--app`:
 
-1. Prefer **Helium** on `PATH`
-2. Else other already-installed Chromium-likes
-3. Else ensure Helium via **workspaced** (`tool which helium-browser helium`),
+1. **Helium** on `PATH`
+2. Else ensure Helium via **workspaced** (`tool which helium-browser helium`),
    bootstrapping a pinned workspaced binary into the user cache if needed
-4. If still missing → **error** (never the system default browser)
+3. If still missing → **error** (never Chrome/Edge/system browser)
 
 ```go
 app := eletrocromo.App{

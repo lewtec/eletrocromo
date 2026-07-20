@@ -10,47 +10,23 @@ import (
 	"strings"
 )
 
-// chromiumLikes are secondary Chromium-family hosts used only when Helium is
-// not already on PATH. Platform init hooks may prepend absolute paths.
-var chromiumLikes = []string{
-	"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", // we hate it but we can count it's there
-	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-	"/Applications/Chromium.app/Contents/MacOS/Chromium",
-	"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-	"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-	"/Applications/Vivaldi.app/Contents/MacOS/Vivaldi",
-	"/Applications/Opera.app/Contents/MacOS/Opera",
-	"msedge",
-	"brave",
-	"vivaldi",
-	"opera",
-	"chromium",
-	"chrome",
-	"google-chrome",
-	"google-chrome-stable",
-	"chromium-browser",
-}
-
-// heliumCandidates are preferred app-window hosts (registry binary name: helium).
+// heliumCandidates are local Helium binary names (workspaced registry bin: helium).
 var heliumCandidates = []string{
 	"helium",
 }
 
-// ErrNoChromium is returned when no Chromium-like --app host can be resolved
-// (local Helium, secondary discovers, or workspaced ensure of helium-browser).
-var ErrNoChromium = errors.New("no app-window browser host found")
+// ErrNoChromium is returned when Helium cannot be resolved (local PATH or
+// workspaced ensure of registry helium-browser).
+var ErrNoChromium = errors.New("no Helium browser host found")
 
 // lookPath is exec.LookPath; tests may override.
 var lookPath = exec.LookPath
 
-// GetChromium searches for a local Chromium-based browser that supports --app.
-// Helium is preferred; other chromiumLikes are secondary. It does not download
-// or call workspaced — see ResolveBrowserHost.
+// GetChromium returns a local Helium binary path if present on PATH.
+// It does not download or call workspaced — see ResolveBrowserHost.
+// Name kept for compatibility; only Helium is supported as the app window host.
 func GetChromium() (string, error) {
-	candidates := make([]string, 0, len(heliumCandidates)+len(chromiumLikes))
-	candidates = append(candidates, heliumCandidates...)
-	candidates = append(candidates, chromiumLikes...)
-	for _, ch := range candidates {
+	for _, ch := range heliumCandidates {
 		path, err := lookPath(ch)
 		if errors.Is(err, exec.ErrNotFound) {
 			continue
@@ -63,11 +39,11 @@ func GetChromium() (string, error) {
 	return "", ErrNoChromium
 }
 
-// ResolveBrowserHost finds a binary suitable for --app launch.
+// ResolveBrowserHost finds Helium for --app launch.
 //
-// Order (SPEC): local Helium → secondary Chromium-likes → ensure Helium via
-// workspaced (tool which helium-browser helium, bootstrapping workspaced if
-// needed) → error. Never opens the system default browser.
+// Order (SPEC): local Helium → ensure via workspaced (tool which helium-browser
+// helium, bootstrapping workspaced if needed) → error.
+// Never opens Chrome/Edge/system browser.
 //
 // Set ELETROCROMO_NO_ENSURE=1 to skip network ensure (tests/CI).
 func ResolveBrowserHost(ctx context.Context) (string, error) {
@@ -89,9 +65,9 @@ func ensureDisabled() bool {
 	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
 }
 
-// LaunchChromium opens the specified URL in app mode (--app).
+// LaunchChromium opens the URL in Helium app mode (--app).
 // Host resolution follows ResolveBrowserHost (uses ctx for ensure only).
-// Only http(s) schemes are allowed. Never falls back to the system browser.
+// Only http(s) schemes are allowed.
 func LaunchChromium(ctx context.Context, u *url.URL) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("invalid URL scheme: %s", u.Scheme)

@@ -49,7 +49,7 @@ func TestGetChromium_NoPanic(t *testing.T) {
 	}
 }
 
-func TestGetChromium_PrefersHelium(t *testing.T) {
+func TestGetChromium_OnlyHelium(t *testing.T) {
 	orig := lookPath
 	t.Cleanup(func() { lookPath = orig })
 
@@ -57,7 +57,7 @@ func TestGetChromium_PrefersHelium(t *testing.T) {
 		switch file {
 		case "helium":
 			return "/fake/helium", nil
-		case "chromium", "chrome", "google-chrome":
+		case "chromium", "chrome", "google-chrome", "msedge", "brave":
 			return "/fake/" + file, nil
 		default:
 			return "", exec.ErrNotFound
@@ -68,26 +68,23 @@ func TestGetChromium_PrefersHelium(t *testing.T) {
 		t.Fatal(err)
 	}
 	if path != "/fake/helium" {
-		t.Fatalf("want helium first, got %q", path)
+		t.Fatalf("want helium, got %q", path)
 	}
 }
 
-func TestGetChromium_SecondaryWhenNoHelium(t *testing.T) {
+func TestGetChromium_IgnoresOtherBrowsers(t *testing.T) {
 	orig := lookPath
 	t.Cleanup(func() { lookPath = orig })
 
 	lookPath = func(file string) (string, error) {
-		if file == "chromium" {
-			return "/usr/bin/chromium", nil
+		if file == "chromium" || file == "chrome" || file == "google-chrome" {
+			return "/usr/bin/" + file, nil
 		}
 		return "", exec.ErrNotFound
 	}
-	path, err := GetChromium()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if path != "/usr/bin/chromium" {
-		t.Fatalf("got %q", path)
+	_, err := GetChromium()
+	if !errors.Is(err, ErrNoChromium) {
+		t.Fatalf("want ErrNoChromium when only Chrome/Chromium present, got path/err %v", err)
 	}
 }
 
@@ -117,7 +114,6 @@ func TestResolveBrowserHost_EnsureViaWorkspacedWhich(t *testing.T) {
 		commandOutput = origCmd
 	})
 
-	// No local browser; workspaced on PATH.
 	lookPath = func(file string) (string, error) {
 		if file == "workspaced" {
 			return "/bin/workspaced", nil
@@ -125,7 +121,6 @@ func TestResolveBrowserHost_EnsureViaWorkspacedWhich(t *testing.T) {
 		return "", exec.ErrNotFound
 	}
 	t.Setenv("ELETROCROMO_NO_ENSURE", "")
-	_ = os.Unsetenv("ELETROCROMO_NO_ENSURE")
 	t.Setenv("ELETROCROMO_WORKSPACED", "")
 
 	var gotArgs []string
@@ -171,11 +166,9 @@ func TestLaunchChromium_NoSystemBrowserFallback(t *testing.T) {
 	}
 }
 
-func TestWorkspacedAssetName_LinuxAmd64(t *testing.T) {
-	// Smoke: function returns a known key for this process GOOS/GOARCH.
+func TestWorkspacedAssetName_HasPinnedChecksum(t *testing.T) {
 	name, err := workspacedAssetName()
 	if err != nil {
-		// Unsupported OS/ARCH in some CI is fine to skip.
 		t.Skip(err)
 	}
 	if _, ok := workspacedAssetSHA256[name]; !ok {
@@ -188,12 +181,7 @@ func TestWorkspacedAssetName_LinuxAmd64(t *testing.T) {
 
 func TestBootstrapSkipsDownloadWhenCached(t *testing.T) {
 	dir := t.TempDir()
-	// Point cache at temp by shadowing via env is hard; call extract path indirectly
-	// by placing a fake binary where workspacedCacheDir would — instead unit-test
-	// only that existing bin short-circuits by using a custom cache through
-	// temporary HOME/XDG_CACHE_HOME.
 	t.Setenv("XDG_CACHE_HOME", dir)
-	// UserCacheDir on Linux uses XDG_CACHE_HOME when set.
 	cache, err := workspacedCacheDir()
 	if err != nil {
 		t.Fatal(err)
