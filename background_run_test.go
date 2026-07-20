@@ -11,7 +11,7 @@ import (
 // task goroutine is scheduled, so Wait cannot return early (the race that
 // previously needed time.Sleep in App.Run).
 func TestBackgroundRun_TracksWaitGroup(t *testing.T) {
-	app := &App{Context: context.Background()}
+	app := &App{Context: t.Context()}
 	started := make(chan struct{})
 	release := make(chan struct{})
 
@@ -52,7 +52,7 @@ func TestBackgroundRun_TracksWaitGroup(t *testing.T) {
 }
 
 func TestBackgroundRun_UsesAppContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	app := &App{Context: ctx}
 

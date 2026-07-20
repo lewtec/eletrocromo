@@ -191,21 +191,21 @@ func wrapHeliumExit(err error, stderr string) error {
 }
 
 // LaunchChromium resolves Helium then opens the URL in app mode (--app).
-// Uses a temporary profile under the OS temp dir when no App.ID is available;
-// prefer App.Run which uses reverse-domain profile isolation.
-func LaunchChromium(ctx context.Context, u *url.URL) error {
+// appID is the consumer reverse-domain id (same as App.ID); profile dir is
+// ProfileDir(appID). Prefer App.Run for the full lifecycle.
+func LaunchChromium(ctx context.Context, u *url.URL, appID string) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("invalid URL scheme: %s", u.Scheme)
+	}
+	profileDir, err := ProfileDir(appID)
+	if err != nil {
+		return err
 	}
 	bin, err := resolveBrowserHost(ctx)
 	if err != nil {
 		return err
 	}
-	dir, err := os.MkdirTemp("", "eletrocromo-launch-*")
-	if err != nil {
-		return err
-	}
-	w, err := startAppWindow(bin, u.String(), dir)
+	w, err := startAppWindow(bin, u.String(), profileDir)
 	if err != nil {
 		return err
 	}

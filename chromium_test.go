@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const testAppID = "br.tec.lew.test"
+
 func TestLaunchChromium_RejectsNonHTTPSchemes(t *testing.T) {
 	cases := []string{
 		"file:///etc/passwd",
@@ -28,7 +30,7 @@ func TestLaunchChromium_RejectsNonHTTPSchemes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse: %v", err)
 			}
-			err = LaunchChromium(context.Background(), u)
+			err = LaunchChromium(t.Context(), u, testAppID)
 			if err == nil {
 				t.Fatal("expected error for non-http(s) scheme")
 			}
@@ -97,7 +99,7 @@ func TestResolveBrowserHost_NoEnsureNoHost(t *testing.T) {
 	lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
 
 	t.Setenv("ELETROCROMO_NO_ENSURE", "1")
-	_, err := ResolveBrowserHost(context.Background())
+	_, err := ResolveBrowserHost(t.Context())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -132,7 +134,7 @@ func TestResolveBrowserHost_EnsureViaWorkspacedWhich(t *testing.T) {
 		return []byte("/cache/tools/helium\n"), nil
 	}
 
-	path, err := ResolveBrowserHost(context.Background())
+	path, err := ResolveBrowserHost(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,12 +157,13 @@ func TestLaunchChromium_NoSystemBrowserFallback(t *testing.T) {
 	t.Cleanup(func() { lookPath = orig })
 	lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
 	t.Setenv("ELETROCROMO_NO_ENSURE", "1")
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	u, err := url.Parse("http://127.0.0.1:9/")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = LaunchChromium(context.Background(), u)
+	err = LaunchChromium(t.Context(), u, testAppID)
 	if err == nil {
 		t.Fatal("expected error without host")
 	}
@@ -169,10 +172,27 @@ func TestLaunchChromium_NoSystemBrowserFallback(t *testing.T) {
 	}
 }
 
+func TestLaunchChromium_UsesAppIDProfile(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", root)
+
+	dir, err := ProfileDir(testAppID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSuffix := filepath.Join("eletrocromo", "profiles", testAppID)
+	if !strings.HasSuffix(dir, wantSuffix) {
+		t.Fatalf("profile %q does not end with %q", dir, wantSuffix)
+	}
+	if !strings.HasPrefix(dir, root) {
+		t.Fatalf("profile not under XDG_DATA_HOME: %q", dir)
+	}
+}
+
 func TestRun_RequiresAppID(t *testing.T) {
 	app := App{
 		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
-		Context: context.Background(),
+		Context: t.Context(),
 	}
 	if err := app.Run(); err == nil {
 		t.Fatal("expected error for missing App.ID")
@@ -182,6 +202,7 @@ func TestRun_RequiresAppID(t *testing.T) {
 func TestRun_ResolveFailsBeforeServer(t *testing.T) {
 	orig := resolveBrowserHost
 	t.Cleanup(func() { resolveBrowserHost = orig })
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	resolveBrowserHost = func(context.Context) (string, error) {
 		return "", fmt.Errorf("%w: test deny", ErrNoChromium)
@@ -190,7 +211,7 @@ func TestRun_ResolveFailsBeforeServer(t *testing.T) {
 	app := App{
 		ID:      "br.tec.lew.test.resolve",
 		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
-		Context: context.Background(),
+		Context: t.Context(),
 	}
 	err := app.Run()
 	if err == nil {
@@ -208,7 +229,8 @@ func TestRun_ImmediateHeliumExitIsError(t *testing.T) {
 		resolveBrowserHost = origResolve
 		heliumStartupGrace = origGrace
 	})
-	heliumStartupGrace = 500 * time.Millisecond
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	heliumStartupGrace = 200 * time.Millisecond
 
 	trueBin, err := exec.LookPath("true")
 	if err != nil {
@@ -221,7 +243,7 @@ func TestRun_ImmediateHeliumExitIsError(t *testing.T) {
 	app := App{
 		ID:      "br.tec.lew.test.exit",
 		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
-		Context: context.Background(),
+		Context: t.Context(),
 	}
 	err = app.Run()
 	if err == nil {
@@ -239,33 +261,23 @@ func TestRun_ResolvesThenLaunches(t *testing.T) {
 		resolveBrowserHost = origResolve
 		heliumStartupGrace = origGrace
 	})
-	// Short grace; sleep stays up long enough.
-	heliumStartupGrace = 200 * time.Millisecond
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	heliumStartupGrace = 100 * time.Millisecond
 
 	var resolved atomic.Bool
-	sleepBin, err := exec.LookPath("sleep")
-	if err != nil {
-		t.Skip("no sleep binary")
-	}
-	// Wrapper script: sleep ignores --user-data-dir flags if we pass sleep as bin
-	// because chromium args are wrong for sleep. Use a shell script as host.
 	script := filepath.Join(t.TempDir(), "fake-helium")
-	body := "#!/bin/sh\nexec sleep 60\n"
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+	// Stay up longer than grace + parent timeout window.
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_ = sleepBin
 	resolveBrowserHost = func(context.Context) (string, error) {
 		resolved.Store(true)
 		return script, nil
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Bound Run by context instead of a manual Sleep goroutine.
+	ctx, cancel := context.WithTimeout(t.Context(), 400*time.Millisecond)
 	defer cancel()
-	go func() {
-		time.Sleep(400 * time.Millisecond)
-		cancel()
-	}()
 
 	app := App{
 		ID:      "br.tec.lew.test.launch",
@@ -315,7 +327,7 @@ func TestBootstrapSkipsDownloadWhenCached(t *testing.T) {
 		return nil, nil
 	}
 
-	path, err := bootstrapWorkspaced(context.Background())
+	path, err := bootstrapWorkspaced(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

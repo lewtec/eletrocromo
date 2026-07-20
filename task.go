@@ -33,12 +33,14 @@ func NewKeepAliveTask(d time.Duration) Task {
 	})
 }
 
-func NewBrowserLaunchTask(urlStr string) Task {
+// NewBrowserLaunchTask launches Helium for urlStr using the appID profile
+// (same reverse-domain identity as App.ID / ProfileDir).
+func NewBrowserLaunchTask(urlStr, appID string) Task {
 	return FunctionTask(func(ctx context.Context) error {
 		u, err := url.Parse(urlStr)
 		if err != nil {
 			return err
 		}
-		return LaunchChromium(ctx, u)
+		return LaunchChromium(ctx, u, appID)
 	})
 }
