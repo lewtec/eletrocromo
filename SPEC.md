@@ -6,14 +6,15 @@ Status: approved (grill session, 2026-07-20). This document is the expectation c
 
 ## One-liner
 
-A pure-Go process owns the HTTP app; eletrocromo binds loopback, gates access, opens a Chromium-like `--app` window (or system browser fallback), and on Linux can keep the process alive and reopen the UI from the system tray.
+A pure-Go process owns the HTTP app; eletrocromo binds loopback, gates access, opens a **Helium** (Chromium-based) `--app` window, and on Linux can keep the process alive and reopen the UI from the system tray.
 
 ## Goals
 
 - Ship desktop apps as **CGo-less Go binaries** whose UI is a normal webapp talking to a **server on the same device**.
 - Let the app focus on an `http.Handler` or `*http.Server`; the library handles bind, auth handshake, window launch, and process lifetime modes.
 - On **Linux (v1 bar)**: window-owned lifetime by default; optional background mode with **tray Open/Quit** so the user never retypes a token URL.
-- Stay thin: the window is someone else’s Chromium (or later a dumb WebView). Deep native integration is out of scope by design.
+- Stay thin: the window is **Helium** (or another Chromium-like if configured/discovered secondarily), not a bundled runtime and not a native toolkit. Deep native integration is out of scope by design.
+- Prefer **[Helium](https://helium.computer/)** as the desktop shell: privacy-oriented Chromium fork that still supports `--app` app windows.
 
 ## Non-goals
 
@@ -24,7 +25,7 @@ Not this library’s job (now or as “quiet scope creep”):
 | Native menus, custom window chrome beyond `--app` | Dumb browser surface |
 | File/folder dialogs as library APIs | App/HTTP/browser concerns |
 | JS ↔ Go IPC bridge beyond ordinary HTTP/WebSocket | Would become Wails |
-| Bundled / downloaded Chromium | Heavy; still doesn’t unlock deep integration |
+| Bundled / downloaded browser runtime inside eletrocromo | Library discovers an install; packaging is separate |
 | Auto-updater, installers, full packaging product | Distribution is separate |
 | Frontend framework or SPA opinions | App serves whatever it wants |
 | Multi-window platform APIs | Out of scope |
@@ -33,6 +34,9 @@ Not this library’s job (now or as “quiet scope creep”):
 | CGo in core, tray, or required deps | Non-negotiable |
 | Win/mac tray/lifecycle parity in v1 | Linux-first |
 | APK generation inside the core module (v1) | Later sibling / packaging story |
+| Firefox (or other non-Chromium) as app window | No `--app`-style borderless/PWA window mode |
+| Emulating app windows via Firefox extensions / profiles | Out of scope |
+| System default browser fallback | Full browser chrome; may be Firefox; not an app window — **removed** |
 
 ## Architecture
 
@@ -47,13 +51,15 @@ Not this library’s job (now or as “quiet scope creep”):
 │                     loopback listener                       │
 │                     (library owns bind)                     │
 │                              │                              │
-│         ┌────────────────────┼────────────────────┐         │
-│         ▼                    ▼                    ▼         │
-│   Chromium --app      system browser         tray (Linux)   │
-│   (preferred)         (fallback)             Open / Quit    │
-│         │                                         │         │
-│         └──────────── reopen / focus ─────────────┘         │
+│              ┌───────────────┴───────────────┐              │
+│              ▼                               ▼              │
+│     Helium --app                      tray (Linux)          │
+│     (primary shell)                   Open / Quit           │
+│     [optional: other Chromium-like]          │              │
+│              │                               │              │
+│              └──────── reopen / focus ───────┘              │
 │                                                             │
+│  No host? → hard error (no system-browser fallback)         │
 │  Lifetime: window-owned (default) | background (--flag)     │
 │  Single-instance: lockfile / PID + resume as needed         │
 └─────────────────────────────────────────────────────────────┘
@@ -89,10 +95,31 @@ The app does **not** own bind as the source of truth. If `Server.Addr` is set, t
 | Bind | Loopback only (`127.0.0.1` / `localhost`, and `::1` if used). Never `0.0.0.0` / LAN as default or silent behavior. |
 | Auth | Always on. Mint token if unset; fail-closed when missing/invalid. |
 | Auth UX | Initial URL may carry `?token=…`; set HttpOnly cookie; subsequent requests use cookie. |
-| UI open | Prefer Chromium-like with `--app`; if none found, system URL opener. |
+| UI open | **App window** via Helium (primary) or secondary Chromium-like + `--app`. **No** system default browser. Missing host ⇒ error. |
 | Scheme | Only `http` / `https` for launch URLs. |
 | Lifecycle | See modes below. |
 | Background work | Existing task/`WaitGroup` style coordination remains valid for app-scheduled work. |
+
+### Desktop window surface: Helium-first, Chromium `--app` only
+
+On desktop, the UI is an app-mode window launched with `--app=<url>`. The **product focus** is **[Helium](https://helium.computer/)** (Chromium-based, ungoogled-oriented; supports the same app-window flags as Chromium).
+
+| Path | Priority | Behavior |
+|------|----------|----------|
+| **Helium** | **Primary** | Discover and prefer Helium binaries/paths first; launch with `--app` |
+| Other Chromium-likes | Secondary (optional) | Chrome, Chromium, Edge, Brave, … only if Helium is absent; same `--app` |
+| System default browser (`xdg-open`, etc.) | **Forbidden** | Do not open the token URL in a random full browser |
+| Firefox / Gecko | **Forbidden** as shell | No `--app` equivalent; never on the discovery list |
+
+**Normative constraints:**
+
+- **No system-browser fallback.** If no suitable host is found, `Run` / launch fails with a clear error (e.g. “install Helium” / `ErrNoChromium` evolved to Helium-oriented messaging). Do not silently degrade to Firefox or a full tabbed browser.
+- **Helium is the dogfood and recommended install** for Linux v1. Docs and example assume Helium is available.
+- Secondary Chromium-likes may remain in the discovery list for convenience, but quality and docs are judged on Helium.
+- **No Firefox app-window support** and no extension/profile hacks.
+- The library does **not** download or vendor Helium; the environment provides it (distro package, [imputnet/helium](https://github.com/imputnet/helium), workspaced shim, etc.).
+
+This is a product boundary: one app-window stack (Chromium `--app`), centered on Helium, fail closed when missing.
 
 ### Auth details (normative intent)
 
@@ -101,9 +128,14 @@ The app does **not** own bind as the source of truth. If `Server.Addr` is set, t
 - Empty `AuthToken` must not accept unauthenticated traffic (fail closed).
 - Reopen/tray/resume must **not** depend on the user pasting the token URL. Resume is in-process or via single-instance protocol to the existing PID.
 
-### Browser discovery (current direction)
+### Browser discovery (target)
 
-Search a known list of Chromium-like paths/binaries (Edge, Chrome, Chromium, Brave, etc.). First hit wins. No download, no pin to a vendor runtime.
+1. **Helium first** — known binary names and install paths (e.g. `helium` on `PATH`, common Linux install locations; extend as installs are observed).
+2. **Then** other Chromium-likes (existing list: Edge, Chrome, Chromium, Brave, Vivaldi, Opera, …), first hit wins among those.
+3. **Never** `firefox` / Gecko, and **never** system URL openers as a substitute for `--app`.
+4. No download, no pin of a browser binary into this module.
+
+Launch always uses the Chromium app-window flag shape: ` <browser> --app=<url> `.
 
 ## Lifetime modes (Linux v1)
 
@@ -138,7 +170,7 @@ v1 is **complete** when all of the following hold:
 
 1. **Entry:** constructor/API for `http.Handler` and for `*http.Server`; library owns loopback bind.
 2. **Auth:** always on; documented handshake; fail-closed.
-3. **Launch:** Chromium-like `--app` when available; system browser fallback.
+3. **Launch:** Helium-first discovery; `--app` only; **hard error** if no Chromium-like host (no system-browser fallback).
 4. **Default lifetime:** window close ⇒ process exit.
 5. **Background mode:** explicit flag; process outlives window.
 6. **Tray:** Open and Quit work without address-bar token ritual.
@@ -204,7 +236,7 @@ Exact API is an implementation detail as long as the contract above holds.
 | Entry | `App{Handler, Context, …}.Run()` | Handler **or** `*http.Server` constructors; bind always library-owned |
 | Server | `httptest` | Keep ephemeral loopback; do not hand bind to the app |
 | Auth | Token + cookie; fail-closed | Keep always-on; no opt-out in v1 |
-| Launch | `GetChromium` + `--app`; system open fallback | Keep; improve Linux paths as needed |
+| Launch | `GetChromium` + `--app`; system open fallback | **Helium first**; secondary Chromium-likes OK; **remove** system-browser fallback; fail if none |
 | Lifetime | Context cancel only; browser `Start` fire-and-forget | Default window-owned; flag background + tray |
 | Tray / lockfile | Absent | Linux v1 requirement |
 | Example | `examples/basic` | Add/replace with template counter + mode flag |
@@ -212,7 +244,8 @@ Exact API is an implementation detail as long as the contract above holds.
 
 ## Success criteria
 
-- A developer writes only HTTP/template logic and gets a usable Linux “desktop” window.
+- A developer writes only HTTP/template logic and gets a usable Linux “desktop” window **under Helium**.
+- Missing Helium/Chromium-like host fails loudly; never opens the default browser.
 - CGO=0 builds and runs the dogfood counter on Linux.
 - Background mode is usable daily without ever typing the loopback token URL.
 - The project description never requires “we’ll add native menus next” to feel complete.
@@ -226,7 +259,8 @@ Resolved by engineering when building, not by re-litigating product meaning:
 - How window-death is detected under CGo-less constraints (browser process wait, WM heuristics, …)
 - Whether tray is a build-tagged Linux file set vs always compiled stubs
 - Precise constructor names and option functional options vs struct fields
+- Exact Helium path list per distro / workspaced layout; whether secondary Chromium-likes stay enabled by default or opt-in
 
 ---
 
-*Aligned in grill session. Do not expand scope into non-goals without a new explicit decision.*
+*Aligned in grill session; amended for Helium-first shell and no system-browser fallback. Do not expand scope into non-goals without a new explicit decision.*
