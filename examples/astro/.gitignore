@@ -3,3 +3,4 @@ dist/
 .astro/
 .wrangler/
 worker/
+package-lock.json

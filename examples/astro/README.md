@@ -8,7 +8,7 @@ binary after a pre-bundle step (no runtime esbuild).
 
 ## Flow
 
-1. `mise run astro` — `astro build` → `dist/{server,client}`
+1. `mise run astro` — `bun run build` (Astro) → `dist/{server,client}`
 2. `mise run assemble` — CF server → `worker/`
 3. `mise run embed` — orvalho `BundleEntry` → `embed/guest.js` + `embed/assets/`
 4. `go run .` — `//go:embed` guest + assets → eletrocromo window
@@ -17,7 +17,7 @@ binary after a pre-bundle step (no runtime esbuild).
 
 ## Prerequisites
 
-- [mise](https://mise.jdx.dev/) — [`mise.toml`](./mise.toml) (node; go from parent mise)
+- [mise](https://mise.jdx.dev/) — [`mise.toml`](./mise.toml) (`bun`; go from parent mise)
 - Local [orvalho](https://github.com/lucasew/orvalho) checkout (see `go.mod` `replace`)
 
 ## Run
@@ -25,5 +25,5 @@ binary after a pre-bundle step (no runtime esbuild).
 ```bash
 mise install
 mise run build   # produces embed/ for //go:embed
-mise run run     # no esbuild at runtime
+mise run run
 ```
