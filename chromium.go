@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -81,10 +82,12 @@ func ensureDisabled() bool {
 type appWindow struct {
 	cmd    *exec.Cmd
 	stderr bytes.Buffer
-	waitc  chan error // closed after Wait; holds Wait result
+	stderrMu sync.Mutex
+	waitc  chan error // holds Wait result once
 }
 
 // startAppWindow starts Helium with an isolated user-data-dir and --app URL.
+// On Unix the child is put in its own process group so stop() can kill the tree.
 func startAppWindow(bin, rawURL, userDataDir string) (*appWindow, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -105,7 +108,8 @@ func startAppWindow(bin, rawURL, userDataDir string) (*appWindow, error) {
 		"--no-default-browser-check",
 		"--app="+u.String(),
 	)
-	w.cmd.Stderr = &w.stderr
+	putInOwnProcessGroup(w.cmd)
+	w.cmd.Stderr = &lockedWriter{mu: &w.stderrMu, w: &w.stderr}
 	// Drop stdout noise from Chromium; keep stderr for launch diagnostics.
 	w.cmd.Stdout = nil
 	if err := w.cmd.Start(); err != nil {
@@ -115,6 +119,17 @@ func startAppWindow(bin, rawURL, userDataDir string) (*appWindow, error) {
 		w.waitc <- w.cmd.Wait()
 	}()
 	return w, nil
+}
+
+type lockedWriter struct {
+	mu *sync.Mutex
+	w  *bytes.Buffer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }
 
 // awaitStartup returns an error if Helium exits within grace (failed launch).
@@ -127,7 +142,7 @@ func (w *appWindow) awaitStartup(grace time.Duration) error {
 	defer timer.Stop()
 	select {
 	case err := <-w.waitc:
-		return wrapHeliumExit(err, &w.stderr)
+		return wrapHeliumExit(err, w.stderrSnapshot())
 	case <-timer.C:
 		return nil
 	}
@@ -144,14 +159,24 @@ func (w *appWindow) watchExit(onExit func(error)) {
 	}()
 }
 
-func wrapHeliumExit(err error, stderr *bytes.Buffer) error {
-	msg := ""
-	if stderr != nil {
-		msg = strings.TrimSpace(stderr.String())
-		// Chromium spam can be huge; keep a useful tail.
-		if len(msg) > 512 {
-			msg = "…" + msg[len(msg)-512:]
-		}
+// stop kills the Helium process tree (process group on Unix) if still running.
+func (w *appWindow) stop() {
+	if w == nil {
+		return
+	}
+	killProcessTree(w.cmd)
+}
+
+func (w *appWindow) stderrSnapshot() string {
+	w.stderrMu.Lock()
+	defer w.stderrMu.Unlock()
+	return w.stderr.String()
+}
+
+func wrapHeliumExit(err error, stderr string) error {
+	msg := strings.TrimSpace(stderr)
+	if len(msg) > 512 {
+		msg = "…" + msg[len(msg)-512:]
 	}
 	if err == nil {
 		if msg != "" {
@@ -160,7 +185,7 @@ func wrapHeliumExit(err error, stderr *bytes.Buffer) error {
 		return fmt.Errorf("%w: process exited immediately", ErrHeliumLaunch)
 	}
 	if msg != "" {
-		return fmt.Errorf("%w: %v (%s)", ErrHeliumLaunch, err, msg)
+		return fmt.Errorf("%w: %w (%s)", ErrHeliumLaunch, err, msg)
 	}
 	return fmt.Errorf("%w: %w", ErrHeliumLaunch, err)
 }
@@ -185,6 +210,7 @@ func LaunchChromium(ctx context.Context, u *url.URL) error {
 		return err
 	}
 	if err := w.awaitStartup(heliumStartupGrace); err != nil {
+		w.stop()
 		return err
 	}
 	// Detached for this helper: reap when process dies, ignore result.

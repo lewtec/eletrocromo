@@ -163,6 +163,7 @@ func (a *App) Run() error {
 		return fmt.Errorf("launch Helium: %w", err)
 	}
 	if err := win.awaitStartup(heliumStartupGrace); err != nil {
+		win.stop()
 		cancel()
 		a.WaitGroup.Wait()
 		return err
@@ -178,6 +179,8 @@ func (a *App) Run() error {
 	})
 
 	<-ctx.Done()
+	// Ctrl+C / parent cancel: tear down the process group so helpers do not leak.
+	win.stop()
 	a.WaitGroup.Wait()
 	return nil
 }
