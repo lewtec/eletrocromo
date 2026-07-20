@@ -1,3 +1,7 @@
+// Basic eletrocromo dogfood (plain handler).
+//
+//	mise run example:basic
+//	# or: go -C examples/basic run .
 package main
 
 import (

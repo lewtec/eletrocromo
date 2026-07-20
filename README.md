@@ -31,11 +31,28 @@ Set `ELETROCROMO_WORKSPACED=/path/to/workspaced` to pin the ensure helper binary
 
 ## Try it
 
+Each example is its own Go module under `examples/*` (`go -C examples/<name> run .`).
+
 Template counter dogfood (Helium-first launch):
 
 ```bash
 mise run example:counter
-# or: go run ./examples/counter
 ```
 
 Ctrl+C in the terminal stops the process. `+` / `−` / reset hit the local server via form POST.
+
+### Astro + orvalho workers
+
+Astro **SSR** (Cloudflare adapter; cat fact in frontmatter per request) hosted by [orvalho `pkg/workers`](https://github.com/lucasew/orvalho) and opened via eletrocromo.
+Guest JS + assets are **`//go:embed`’d** after `mise run build` (no runtime esbuild).
+Tools live in [`examples/astro/mise.toml`](examples/astro/mise.toml).
+
+```bash
+cd examples/astro
+mise install
+mise run build   # astro + orvalho pre-bundle → embed/
+mise run run     # go run with embedded guest
+# from repo root: mise run example:astro:build && mise run example:astro
+```
+
+Needs a local orvalho checkout (see `examples/astro/go.mod` `replace`). Details: [examples/astro/README.md](examples/astro/README.md).

@@ -1,0 +1,87 @@
+# Astro SSR (CF adapter) → orvalho pre-bundle → //go:embed → eletrocromo.
+# Run: mise install && mise run build && mise run
+
+[tools]
+go = "1.26.5"
+node = "lts"
+
+[tools."http:esbuild"]
+version = "0.28.1"
+strip_components = 1
+
+[tools."http:esbuild".platforms]
+linux-x64 = { url = "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-{{ version }}.tgz" }
+linux-arm64 = { url = "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-{{ version }}.tgz" }
+macos-x64 = { url = "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-{{ version }}.tgz" }
+macos-arm64 = { url = "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-{{ version }}.tgz" }
+
+[tasks.install]
+description = "npm deps + Go module deps (orvalho via go.mod replace)"
+run = """
+npm install
+go mod download
+"""
+
+[tasks.astro]
+description = "Astro SSR build (Cloudflare adapter) → dist/"
+depends = ["install"]
+run = "npm run build"
+
+[tasks.assemble]
+description = "Copy CF dist into worker/ for bundling"
+run = """
+# Astro 6 / @astrojs/cloudflare 13: dist/server + dist/client (pesquisarr layout)
+# or dist/_worker.js (older CF pages-style layout).
+rm -rf worker
+mkdir -p worker/assets
+if [ -d dist/server ]; then
+  cp -a dist/server/. worker/
+  if [ -d dist/client ]; then
+    cp -a dist/client/. worker/assets/
+  fi
+elif [ -d dist/_worker.js ]; then
+  cp -a dist/_worker.js/. worker/
+  for f in dist/*; do
+    base=$(basename "$f")
+    case "$base" in
+      _worker.js|_routes.json|wrangler.json|wrangler.toml) continue ;;
+    esac
+    [ -e "$f" ] && cp -a "$f" worker/assets/
+  done
+  if [ -f worker/index.js ] && [ ! -f worker/entry.mjs ]; then
+    cp worker/index.js worker/entry.mjs
+  fi
+else
+  echo "missing dist/server or dist/_worker.js — run: mise run astro" >&2
+  ls -la dist >&2 || true
+  exit 1
+fi
+if [ ! -f worker/entry.mjs ] && [ -f worker/index.js ]; then
+  cp worker/index.js worker/entry.mjs
+fi
+if [ ! -f worker/entry.mjs ]; then
+  echo "missing worker/entry.mjs after assemble" >&2
+  ls -la worker >&2 || true
+  exit 1
+fi
+echo "assembled CF dist → worker/"
+"""
+
+[tasks.embed]
+description = "orvalho/esbuild pre-bundle → embed/guest.js + embed/assets (//go:embed)"
+depends = ["assemble"]
+run = "go run ./genbundle.go"
+
+[tasks.build]
+description = "Astro SSR + assemble + embed into Go"
+depends = ["astro"]
+run = "mise run embed"
+
+[tasks.run]
+description = "Run eletrocromo with //go:embed guest (no runtime esbuild)"
+run = "go run ."
+
+[tasks."run:build"]
+description = "Build then run"
+depends = ["build"]
+run = "go run ."
