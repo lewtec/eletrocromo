@@ -1,7 +1,7 @@
 // Counter is a dogfood app for eletrocromo host resolve / Helium --app launch.
 //
-//	go run ./examples/counter
-//	# or: mise run example:counter
+//	mise run example:counter
+//	# or: go -C examples/counter run .
 //
 // Ctrl+C shuts down the process (window-owned lifetime is not wired yet).
 package main

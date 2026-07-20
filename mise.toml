@@ -5,6 +5,10 @@ golangci-lint = "2.12.2"
 
 [tasks]
 "install:go" = "go mod download"
+"install:examples" = """
+go -C examples/basic mod download
+go -C examples/counter mod download
+"""
 install = { depends = ["install:*"] }
 lint = "workspaced codebase lint --review"
 fmt = "workspaced codebase format"
@@ -15,5 +19,9 @@ codegen = { depends = ["codegen:*"] }
 ci = { depends = ["lint", "test"] }
 
 # Dogfood host resolve + Helium --app (Ctrl+C to quit).
-"example:counter" = "go run ./examples/counter"
-"example:basic" = "go run ./examples/basic"
+"example:basic" = "go -C examples/basic run ."
+"example:counter" = "go -C examples/counter run ."
+
+# Astro + orvalho: tools/tasks live in examples/astro/mise.toml
+"example:astro:build" = "mise -C examples/astro run build"
+"example:astro" = "mise -C examples/astro run run"
