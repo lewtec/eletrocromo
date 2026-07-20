@@ -1,14 +1,13 @@
 [tools]
+"github:lucasew/workspaced" = "0.11.3"
 go = "1.26.5"
 golangci-lint = "2.12.2"
 
 [tasks]
 "install:go" = "go mod download"
 install = { depends = ["install:*"] }
-"lint:go" = "golangci-lint run ./..."
-lint = { depends = ["lint:*"] }
-"fmt:go" = "go fmt ./..."
-fmt = { depends = ["fmt:*"] }
+lint = "workspaced codebase lint --review"
+fmt = "workspaced codebase format"
 "test:go" = "go test -v ./..."
 test = { depends = ["test:*"] }
 "codegen:go" = "go generate ./..."
