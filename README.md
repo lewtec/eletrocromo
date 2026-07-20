@@ -26,3 +26,14 @@ log.Fatal(app.Run())
 
 Set `ELETROCROMO_NO_ENSURE=1` to disable network ensure (tests/CI).
 Set `ELETROCROMO_WORKSPACED=/path/to/workspaced` to pin the ensure helper binary.
+
+## Try it
+
+Template counter dogfood (Helium-first launch):
+
+```bash
+mise run example:counter
+# or: go run ./examples/counter
+```
+
+Ctrl+C in the terminal stops the process. `+` / `−` / reset hit the local server via form POST.
