@@ -14,3 +14,7 @@ test = { depends = ["test:*"] }
 "codegen:go" = "go generate ./..."
 codegen = { depends = ["codegen:*"] }
 ci = { depends = ["lint", "test"] }
+
+# Dogfood host resolve + Helium --app (Ctrl+C to quit).
+"example:counter" = "go run ./examples/counter"
+"example:basic" = "go run ./examples/basic"
