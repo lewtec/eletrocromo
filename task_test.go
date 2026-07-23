@@ -64,7 +64,7 @@ func TestNewBrowserLaunchTask_RejectsNonHTTPScheme(t *testing.T) {
 
 // Cancelled context must short-circuit before LaunchChromium (no browser spawn).
 func TestNewBrowserLaunchTask_RespectsCancelledContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	task := NewBrowserLaunchTask("http://127.0.0.1:9/", testAppID)
