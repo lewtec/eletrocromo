@@ -71,7 +71,21 @@ Cobra tooling binary (separate from the importable library):
 go run ./cmd/eletrocromo --help
 go run ./cmd/eletrocromo version
 go run ./cmd/eletrocromo android create --help
+# or: mise run build:cli && ./bin/eletrocromo version
 ```
+
+### Release
+
+Self-contained binaries (`CGO_ENABLED=0`) via [GoReleaser](https://goreleaser.com/)
+on GitHub Actions (push/`schedule` to `main`, or `workflow_dispatch`):
+
+```bash
+# local (needs GITHUB_TOKEN + push rights):
+mise run release -- patch   # or next | minor | major
+```
+
+Artifacts: `eletrocromo_{Linux,Darwin,Windows}_{x86_64,arm64}` archives under
+GitHub Releases, stamped with `internal/version` ldflags.
 
 Version uses the usual Go release stamps (`internal/version`):
 

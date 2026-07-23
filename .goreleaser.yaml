@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+project_name: eletrocromo
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: eletrocromo
+    binary: eletrocromo
+    main: ./cmd/eletrocromo
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/lewtec/eletrocromo/internal/version.Version={{ .Version }}
+        -X github.com/lewtec/eletrocromo/internal/version.Commit={{ .Commit }}
+        -X github.com/lewtec/eletrocromo/internal/version.Date={{ .CommitDate }}
+        -X github.com/lewtec/eletrocromo/internal/version.BuiltBy=goreleaser
+
+archives:
+  - formats: [tar.gz]
+    # uname-friendly OS/arch names
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
+
+    Self-contained binaries (`CGO_ENABLED=0`). Install example:
+
+    ```bash
+    # Linux x86_64
+    curl -fsSL -o eletrocromo.tar.gz \
+      "https://github.com/lewtec/eletrocromo/releases/download/{{ .Tag }}/eletrocromo_Linux_x86_64.tar.gz"
+    tar -xzf eletrocromo.tar.gz
+    ./eletrocromo version
+    ```
