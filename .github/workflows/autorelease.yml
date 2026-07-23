@@ -47,6 +47,9 @@ jobs:
       - name: Install
         run: mise run install
 
+      - name: CI
+        run: mise run ci
+
       - name: Create Pull Request if there is new stuff from updaters
         if: github.event_name != 'pull_request'
         uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 # v8
@@ -68,9 +71,6 @@ jobs:
             echo "The update scripts changed something and a PR was created. Giving up deploy." >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-
-      - name: CI
-        run: mise run ci
 
       - name: Make release if everything looks right
         if: github.event_name != 'pull_request'
