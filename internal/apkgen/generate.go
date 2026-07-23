@@ -8,7 +8,6 @@ package apkgen
 import (
 	"bytes"
 	"embed"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -34,9 +33,11 @@ type Config struct {
 	VersionName string `json:"version_name"`
 	// VersionCode is Android versionCode (default 1).
 	VersionCode int `json:"version_code"`
-	// GoMain is a path (often relative to the generated project) to the Go
-	// main package directory used by scripts/build-go.sh.
+	// GoMain is a path (often relative to the config file or generated host)
+	// to the Go main package directory.
 	GoMain string `json:"go_main"`
+	// ABIs lists Android ABIs for the fat APK (default DefaultABIs).
+	ABIs []string `json:"abis,omitempty"`
 }
 
 // templateData is passed to text/template for file bodies.
@@ -223,32 +224,10 @@ func renderFile(rel string, raw []byte, data templateData) (destRel string, body
 }
 
 func writeConfigJSON(out string, cfg Config) error {
-	// Re-encode for stable key order / pretty print (struct tags).
-	type fileCfg struct {
-		SchemaVersion int      `json:"schema_version"`
-		PackageID     string   `json:"package_id"`
-		AppName       string   `json:"app_name"`
-		VersionName   string   `json:"version_name"`
-		VersionCode   int      `json:"version_code"`
-		GoMain        string   `json:"go_main"`
-		Generator     string   `json:"generator"`
-		ABIs          []string `json:"abis"`
-	}
-	doc := fileCfg{
-		SchemaVersion: 1,
-		PackageID:     cfg.PackageID,
-		AppName:       cfg.AppName,
-		VersionName:   cfg.VersionName,
-		VersionCode:   cfg.VersionCode,
-		GoMain:        cfg.GoMain,
-		Generator:     "eletrocromo android create",
-		ABIs:          []string{"arm64-v8a", "armeabi-v7a", "x86_64"},
-	}
-	raw, err := json.MarshalIndent(doc, "", "  ")
+	raw, err := encodeConfigJSON(cfg, "eletrocromo android create")
 	if err != nil {
 		return err
 	}
-	raw = append(raw, '\n')
 	// Template already wrote eletrocromo.json; overwrite with canonical JSON.
-	return os.WriteFile(filepath.Join(out, "eletrocromo.json"), raw, 0o644)
+	return os.WriteFile(filepath.Join(out, ConfigFileName), raw, 0o644)
 }

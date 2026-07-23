@@ -66,26 +66,35 @@ go run ./cmd/eletrocromo --help
 go run ./cmd/eletrocromo android create --help
 ```
 
-### Android APK host (generator)
+### Android APK (straight build)
 
-Ad-hoc Android projects (WebView + multiarch Go binary), PhoneGap/Expo-style,
-keyed by reverse-domain package id (`App.ID`):
+Standard app config is `eletrocromo.json` next to your Go main (see
+`examples/counter/eletrocromo.json`). One command scaffolds the WebView host,
+cross-compiles multiarch Go (`GOOS=android`), and runs Gradle:
 
 ```bash
-go run ./cmd/eletrocromo android create \
-  --id br.tec.lew.eletrocromo.counter \
-  --name Counter \
-  --go-main ../../examples/counter \
-  --out dist/android-counter
+# from the app module:
+cd examples/counter
+go run ../../cmd/eletrocromo android build
+# → dist/counter-debug.apk (package id from eletrocromo.json)
 
-# dogfood shortcut:
+# from repo root:
+go run ./cmd/eletrocromo android build \
+  --config examples/counter/eletrocromo.json \
+  --out dist/counter-debug.apk
+
 mise run apk:counter
 ```
 
-Then in the generated tree: `./scripts/build-go.sh` (needs `GOOS=android`) and
-`gradle wrapper && ./gradlew assembleDebug`. The Go process must run with
-`ELETROCROMO_NO_UI=1` (set by the shell) so Helium is skipped and
-`ELETROCROMO_READY <url>` is printed for WebView.
+Default ABI is **arm64-v8a** only (pure Go / `CGO_ENABLED=0`; other ABIs need
+an NDK). Full APK also needs **JDK 17+**, **Android SDK** (`ANDROID_HOME`), and
+**Gradle 8.9+** on `PATH`. Without the SDK:
 
-The generator lives in-repo (`internal/apkgen/`, `cmd/eletrocromo`); it does not pull
-the Android SDK into the core library.
+```bash
+go run ./cmd/eletrocromo android build --config examples/counter/eletrocromo.json --go-only --workdir dist/android-counter
+```
+
+`android create` still exists if you only want the Gradle tree. Runtime: the
+service sets `ELETROCROMO_NO_UI=1` and loads the `ELETROCROMO_READY` URL in
+WebView. Packaging lives in `internal/apkgen/` + `cmd/eletrocromo` (not in the
+core library import path for apps).

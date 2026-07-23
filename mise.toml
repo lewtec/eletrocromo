@@ -18,14 +18,19 @@ test = { depends = ["test:*"] }
 codegen = { depends = ["codegen:*"] }
 ci = { depends = ["lint", "test"] }
 
-# PhoneGap-style Android host for the counter dogfood (package id = App.ID).
+# Build multiarch debug APK for the counter dogfood (needs ANDROID_HOME + JDK + Gradle).
+# Falls back to --go-only host tree when SDK is missing is not automatic; use apk:counter:go.
 "apk:counter" = """
-go run ./cmd/eletrocromo android create \
-  --id br.tec.lew.eletrocromo.counter \
-  --name Counter \
-  --go-main ../../examples/counter \
-  --out dist/android-counter \
-  --force
+go run ./cmd/eletrocromo android build \
+  --config examples/counter/eletrocromo.json \
+  --out dist/counter-debug.apk \
+  --workdir dist/android-counter
+"""
+"apk:counter:go" = """
+go run ./cmd/eletrocromo android build \
+  --config examples/counter/eletrocromo.json \
+  --go-only \
+  --workdir dist/android-counter
 """
 
 # Dogfood host resolve + Helium --app (Ctrl+C to quit).

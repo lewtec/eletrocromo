@@ -29,7 +29,7 @@ android {
         jvmTarget = "17"
     }
 
-    // Fat multiarch APK: arm64 + arm32 + x86_64 (emulator).
+    // Single-APK packaging; ABIs come from jniLibs/ (default: arm64-v8a).
     splits {
         abi {
             isEnable = false

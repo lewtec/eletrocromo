@@ -12,12 +12,11 @@ fi
 
 # Minimal JSON scrape without jq dependency.
 go_main="$(sed -n 's/.*"go_main"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' eletrocromo.json | head -1)"
-if [[ -z "$go_main" || "$go_main" == "." ]]; then
-  echo "set go_main in eletrocromo.json to your app module path (directory with main package)" >&2
-  exit 1
+if [[ -z "$go_main" ]]; then
+  go_main="."
 fi
 
-# Resolve relative to this project dir.
+# Resolve relative to this project dir (absolute go_main from `android build` is fine).
 if [[ "$go_main" != /* ]]; then
   go_main="$ROOT/$go_main"
 fi
@@ -32,10 +31,13 @@ build_one() {
   local outdir="$ROOT/app/src/main/jniLibs/$abi"
   mkdir -p "$outdir"
   echo "→ $abi (GOARCH=$goarch)"
-  CGO_ENABLED=0 GOOS=android GOARCH="$goarch" \
-    go build -trimpath -ldflags="-s -w" \
-    -o "$outdir/libeletrocromo.so" \
-    "$go_main"
+  (
+    cd "$go_main"
+    CGO_ENABLED=0 GOOS=android GOARCH="$goarch" \
+      go build -trimpath -ldflags="-s -w" \
+      -o "$outdir/libeletrocromo.so" \
+      .
+  )
 }
 
 build_one arm64 arm64-v8a
