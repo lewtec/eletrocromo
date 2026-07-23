@@ -122,6 +122,9 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // NoUI / ELETROCROMO_NO_UI: skip Helium; bind, print ReadyLinePrefix + URL, wait.
 func (a *App) Run() error {
+	// Android pure-Go DNS cannot use netd on [::1]:53; set PreferGo + real servers.
+	configureDNSForPlatform()
+
 	if err := ValidateAppID(a.ID); err != nil {
 		return err
 	}

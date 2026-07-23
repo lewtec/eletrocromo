@@ -12,12 +12,24 @@ import (
 	"embed"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 
 	"github.com/lewtec/eletrocromo"
 	"github.com/lucasew/orvalho/pkg/workers"
 )
+
+// statusRecorder captures WriteHeader for post-request logging.
+type statusRecorder struct {
+	http.ResponseWriter
+	code int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.code = code
+	s.ResponseWriter.WriteHeader(code)
+}
 
 //go:embed embed/guest.js
 var guestJS string
@@ -46,9 +58,18 @@ func main() {
 		}, nil, 0),
 	})
 
+	// Log worker failures (orvalho already prints to stderr; keep a clear
+	// prefix so Android logcat is easy to filter).
+	h := workers.Handler(iso)
 	app := eletrocromo.App{
-		ID:      "br.tec.lew.eletrocromo.astro",
-		Handler: workers.Handler(iso),
+		ID: "br.tec.lew.eletrocromo.astro",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rw := &statusRecorder{ResponseWriter: w, code: http.StatusOK}
+			h.ServeHTTP(rw, r)
+			if rw.code >= 500 {
+				log.Printf("astro handler: %s %s -> %d", r.Method, r.URL.RequestURI(), rw.code)
+			}
+		}),
 		Context: ctx,
 	}
 	log.Printf("astro example: launching Helium window (//go:embed guest + assets)")

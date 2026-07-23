@@ -58,10 +58,16 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- Filled with WebView once the local server is ready -->
-    <FrameLayout
-        android:id="@+id/webview_container"
+    <!-- WebView + pull-to-refresh once the local server is ready -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipe_refresh"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="gone" />
+        android:visibility="gone">
+
+        <FrameLayout
+            android:id="@+id/webview_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 </FrameLayout>

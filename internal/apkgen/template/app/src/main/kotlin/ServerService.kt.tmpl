@@ -94,6 +94,8 @@ class ServerService : Service() {
             env["ELETROCROMO_READY_FILE"] = readyFile.absolutePath
             env["HOME"] = filesDir.absolutePath
             env["TMPDIR"] = cacheDir.absolutePath
+            // Pure-Go DNS cannot talk to Android netd on [::1]:53; pass real resolvers.
+            env["ELETROCROMO_DNS"] = androidDNSServers()
             // Child must not send loopback through a proxy either.
             env["NO_PROXY"] = "127.0.0.1,localhost,::1"
             env["no_proxy"] = "127.0.0.1,localhost,::1"
@@ -101,7 +103,8 @@ class ServerService : Service() {
             val proc = pb.start()
             process = proc
 
-            // Read stdout concurrently while also polling the ready file.
+            // Drain stdout/stderr for the life of the process. Stopping after
+            // READY fills the pipe and blocks Go (workers logs, panics, …).
             var stdoutUrl: String? = null
             val readerThread = thread(name = "eletrocromo-stdout", isDaemon = true) {
                 try {
@@ -110,9 +113,9 @@ class ServerService : Service() {
                     while (reader.readLine().also { line = it } != null) {
                         val text = line ?: continue
                         Log.i(TAG, "go: $text")
-                        val url = extractReadyUrl(text) ?: continue
-                        stdoutUrl = url
-                        break
+                        if (stdoutUrl == null) {
+                            extractReadyUrl(text)?.let { stdoutUrl = it }
+                        }
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "stdout reader: $e")
@@ -247,10 +250,11 @@ class ServerService : Service() {
         }
 
         return try {
+            // SSR + outbound fetch (astro/catfact) needs seconds, not sub-second.
             val conn = (URL(url).openConnection(Proxy.NO_PROXY) as HttpURLConnection).apply {
                 instanceFollowRedirects = false
-                connectTimeout = 800
-                readTimeout = 800
+                connectTimeout = 3_000
+                readTimeout = 15_000
                 requestMethod = "GET"
                 setRequestProperty("Connection", "close")
                 useCaches = false
@@ -263,6 +267,41 @@ class ServerService : Service() {
             }
         } catch (e: Exception) {
             "error: ${e.message ?: e}"
+        }
+    }
+
+    /**
+     * System DNS from getprop, plus public fallbacks. Skips 127.0.0.1 / ::1
+     * stubs that pure-Go UDP cannot use on Android.
+     */
+    private fun androidDNSServers(): String {
+        val found = linkedSetOf<String>()
+        for (key in listOf(
+            "net.dns1", "net.dns2", "net.dns3", "net.dns4",
+            "dhcp.wlan0.dns1", "dhcp.wlan0.dns2",
+        )) {
+            val v = getprop(key) ?: continue
+            if (v.isBlank() || v == "0.0.0.0" || v == "::" ||
+                v == "127.0.0.1" || v == "::1" || v.startsWith("fe80:")
+            ) {
+                continue
+            }
+            found.add(v)
+        }
+        // Always have a public fallback (egress may still need network).
+        found.add("8.8.8.8")
+        found.add("1.1.1.1")
+        return found.joinToString(",")
+    }
+
+    private fun getprop(key: String): String? {
+        return try {
+            val p = Runtime.getRuntime().exec(arrayOf("/system/bin/getprop", key))
+            val out = p.inputStream.bufferedReader().readText().trim()
+            p.waitFor()
+            out.ifEmpty { null }
+        } catch (_: Exception) {
+            null
         }
     }
 

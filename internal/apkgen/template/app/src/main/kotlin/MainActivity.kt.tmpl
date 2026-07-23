@@ -23,10 +23,12 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 /**
  * Thin WebView shell. The Go binary owns HTTP + auth; this activity only
- * shows a splash until READY, then loads the token URL.
+ * shows a splash until READY, then loads the token URL. Pull-to-refresh
+ * reloads the page (SSR apps like cat facts get a new response).
  */
 class MainActivity : AppCompatActivity() {
     private var webView: WebView? = null
@@ -40,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var splashDetail: TextView
     private lateinit var splashProgress: ProgressBar
     private lateinit var splashRetry: Button
+    private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var webContainer: FrameLayout
 
     private val connection = object : ServiceConnection {
@@ -87,7 +90,14 @@ class MainActivity : AppCompatActivity() {
         splashDetail = findViewById(R.id.splash_detail)
         splashProgress = findViewById(R.id.splash_progress)
         splashRetry = findViewById(R.id.splash_retry)
+        swipeRefresh = findViewById(R.id.swipe_refresh)
         webContainer = findViewById(R.id.webview_container)
+
+        swipeRefresh.setOnRefreshListener { refreshPage() }
+        // Only start pull-to-refresh when the WebView is scrolled to the top.
+        swipeRefresh.setOnChildScrollUpCallback { _, _ ->
+            webView?.canScrollVertically(-1) == true
+        }
 
         splashRetry.setOnClickListener {
             showSplash(getString(R.string.loading), detail = null, error = false)
@@ -105,9 +115,23 @@ class MainActivity : AppCompatActivity() {
         bindService(intent, connection, Context.BIND_AUTO_CREATE)
     }
 
+    private fun refreshPage() {
+        val url = appUrl
+        val wv = webView
+        when {
+            wv != null && url != null -> wv.loadUrl(url) // full GET — new SSR/cat fact
+            wv != null -> wv.reload()
+            else -> {
+                swipeRefresh.isRefreshing = false
+                server?.restart()
+            }
+        }
+    }
+
     private fun showSplash(status: String, detail: String?, error: Boolean) {
         splash.visibility = View.VISIBLE
-        webContainer.visibility = View.GONE
+        swipeRefresh.visibility = View.GONE
+        swipeRefresh.isRefreshing = false
         splashStatus.text = status
         if (detail.isNullOrBlank()) {
             splashDetail.visibility = View.GONE
@@ -122,7 +146,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun showWeb() {
         splash.visibility = View.GONE
-        webContainer.visibility = View.VISIBLE
+        swipeRefresh.visibility = View.VISIBLE
+        swipeRefresh.isRefreshing = false
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -168,6 +193,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
+                swipeRefresh.isRefreshing = false
                 if (!pageHadError) {
                     showWeb()
                 }
@@ -180,6 +206,7 @@ class MainActivity : AppCompatActivity() {
             ) {
                 if (request?.isForMainFrame != true) return
                 pageHadError = true
+                swipeRefresh.isRefreshing = false
                 val code = errorResponse?.statusCode ?: -1
                 val reason = errorResponse?.reasonPhrase ?: ""
                 val reqUrl = request.url?.toString().orEmpty()
@@ -208,6 +235,7 @@ class MainActivity : AppCompatActivity() {
             ) {
                 if (request?.isForMainFrame != true) return
                 pageHadError = true
+                swipeRefresh.isRefreshing = false
                 val desc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     error?.description?.toString() ?: "unknown"
                 } else {
