@@ -188,14 +188,17 @@ func (a *App) Run() error {
 			base = u.String()
 		}
 	}
-	link := fmt.Sprintf("%s/?token=%s", strings.TrimRight(base, "/"), a.AuthToken)
-	log.Printf("webserver started on %s", link)
+	// Authenticated app URL (query token). Pass to Helium / Android READY only —
+	// never to log.Printf: startup logs are often pasted into bug reports.
+	baseURL := strings.TrimRight(base, "/")
+	link := fmt.Sprintf("%s/?token=%s", baseURL, a.AuthToken)
+	log.Printf("webserver started on %s", baseURL)
 
 	if noUI {
 		// Machine-parseable line on stdout without log timestamps (Android host).
-		// Also log for humans / tests that capture log.Writer().
+		// Token stays on stdout / READY file only; human logs keep the base URL.
 		fmt.Fprintln(os.Stdout, ReadyLinePrefix+link)
-		log.Print(ReadyLinePrefix + link)
+		log.Print(ReadyLinePrefix + baseURL)
 		// Optional side channel: write the URL to a file (stdout can block or be
 		// lost under ProcessBuilder; Android shell sets ELETROCROMO_READY_FILE).
 		if path := strings.TrimSpace(os.Getenv("ELETROCROMO_READY_FILE")); path != "" {
