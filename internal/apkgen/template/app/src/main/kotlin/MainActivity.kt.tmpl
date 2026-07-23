@@ -5,23 +5,42 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.graphics.Bitmap
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.view.View
+import android.webkit.CookieManager
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * Thin WebView shell. The Go binary (libeletrocromo.so) owns HTTP + auth;
- * this activity only presents the READY URL.
+ * Thin WebView shell. The Go binary owns HTTP + auth; this activity only
+ * shows a splash until READY, then loads the token URL.
  */
 class MainActivity : AppCompatActivity() {
     private var webView: WebView? = null
-    private var status: TextView? = null
     private var server: ServerService? = null
     private var bound = false
+    private var appUrl: String? = null
+    private var pageHadError = false
+
+    private lateinit var splash: LinearLayout
+    private lateinit var splashStatus: TextView
+    private lateinit var splashDetail: TextView
+    private lateinit var splashProgress: ProgressBar
+    private lateinit var splashRetry: Button
+    private lateinit var webContainer: FrameLayout
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -29,13 +48,21 @@ class MainActivity : AppCompatActivity() {
             server = binder.getService()
             bound = true
             server?.setListener(object : ServerService.Listener {
+                override fun onStatus(message: String) {
+                    runOnUiThread { showSplash(message, detail = null, error = false) }
+                }
+
                 override fun onReady(url: String) {
-                    runOnUiThread { loadApp(url) }
+                    appUrl = url
+                    runOnUiThread {
+                        showSplash(getString(R.string.status_loading), detail = null, error = false)
+                        loadApp(url)
+                    }
                 }
 
                 override fun onFailed(message: String) {
                     runOnUiThread {
-                        status?.text = getString(R.string.server_failed) + ": " + message
+                        showSplash(getString(R.string.server_failed), detail = message, error = true)
                     }
                 }
             })
@@ -48,31 +75,159 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        status = TextView(this).apply {
-            text = getString(R.string.loading)
-            textSize = 16f
-            setPadding(48, 48, 48, 48)
+        // Loopback must never go through a system/VPN HTTP proxy.
+        System.setProperty("java.net.useSystemProxies", "false")
+        System.setProperty("http.nonProxyHosts", "localhost|127.*|[::1]")
+        setContentView(R.layout.activity_main)
+
+        splash = findViewById(R.id.splash)
+        splashStatus = findViewById(R.id.splash_status)
+        splashDetail = findViewById(R.id.splash_detail)
+        splashProgress = findViewById(R.id.splash_progress)
+        splashRetry = findViewById(R.id.splash_retry)
+        webContainer = findViewById(R.id.webview_container)
+
+        splashRetry.setOnClickListener {
+            showSplash(getString(R.string.loading), detail = null, error = false)
+            val url = appUrl
+            if (url != null && webView != null) {
+                webView?.loadUrl(url)
+            } else {
+                // Full restart of the Go process path.
+                server?.restart()
+            }
         }
-        setContentView(status)
 
         val intent = Intent(this, ServerService::class.java)
         startForegroundService(intent)
         bindService(intent, connection, Context.BIND_AUTO_CREATE)
     }
 
+    private fun showSplash(status: String, detail: String?, error: Boolean) {
+        splash.visibility = View.VISIBLE
+        webContainer.visibility = View.GONE
+        splashStatus.text = status
+        if (detail.isNullOrBlank()) {
+            splashDetail.visibility = View.GONE
+            splashDetail.text = ""
+        } else {
+            splashDetail.visibility = View.VISIBLE
+            splashDetail.text = detail
+        }
+        splashProgress.visibility = if (error) View.GONE else View.VISIBLE
+        splashRetry.visibility = if (error) View.VISIBLE else View.GONE
+    }
+
+    private fun showWeb() {
+        splash.visibility = View.GONE
+        webContainer.visibility = View.VISIBLE
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun loadApp(url: String) {
+        val existing = webView
+        if (existing != null) {
+            existing.loadUrl(url)
+            return
+        }
+
         val wv = WebView(this)
         webView = wv
+        webContainer.removeAllViews()
+        webContainer.addView(
+            wv,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+
+        CookieManager.getInstance().setAcceptCookie(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
+        }
+
         val settings: WebSettings = wv.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
+        settings.databaseEnabled = true
         settings.cacheMode = WebSettings.LOAD_DEFAULT
-        wv.webViewClient = WebViewClient()
-        setContentView(wv)
+        settings.domStorageEnabled = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+        }
+        // Local loopback app — no need for zoom chrome.
+        settings.builtInZoomControls = false
+        settings.displayZoomControls = false
+
+        wv.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                pageHadError = false
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                if (!pageHadError) {
+                    showWeb()
+                }
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                errorResponse: WebResourceResponse?,
+            ) {
+                if (request?.isForMainFrame != true) return
+                pageHadError = true
+                val code = errorResponse?.statusCode ?: -1
+                val reason = errorResponse?.reasonPhrase ?: ""
+                val reqUrl = request.url?.toString().orEmpty()
+                runOnUiThread {
+                    showSplash(
+                        getString(R.string.webview_http_error, code),
+                        detail = buildString {
+                            append(reason)
+                            if (reqUrl.isNotBlank()) {
+                                if (isNotEmpty()) append('\n')
+                                append(reqUrl)
+                            }
+                            if (code == 401 || code == 403) {
+                                append("\n\nAuth token was rejected (check ELETROCROMO_READY handoff).")
+                            }
+                        },
+                        error = true,
+                    )
+                }
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?,
+            ) {
+                if (request?.isForMainFrame != true) return
+                pageHadError = true
+                val desc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    error?.description?.toString() ?: "unknown"
+                } else {
+                    "load error"
+                }
+                val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    error?.errorCode ?: -1
+                } else {
+                    -1
+                }
+                runOnUiThread {
+                    showSplash(
+                        getString(R.string.webview_error),
+                        detail = "code=$code\n$desc\n${request.url}",
+                        error = true,
+                    )
+                }
+            }
+        }
+
         wv.loadUrl(url)
     }
 
@@ -82,6 +237,7 @@ class MainActivity : AppCompatActivity() {
             unbindService(connection)
             bound = false
         }
+        webContainer.removeAllViews()
         webView?.destroy()
         webView = null
         super.onDestroy()

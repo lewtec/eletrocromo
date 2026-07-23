@@ -29,6 +29,7 @@ func TestCreate_PackageIDLayout(t *testing.T) {
 		"app/src/main/java/br/tec/lew/counter/MainActivity.kt",
 		"app/src/main/java/br/tec/lew/counter/ServerService.kt",
 		"app/src/main/res/xml/network_security_config.xml",
+		"app/src/main/res/layout/activity_main.xml",
 		"scripts/build-go.sh",
 		"README.md",
 	}

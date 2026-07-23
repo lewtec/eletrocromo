@@ -9,19 +9,33 @@ import android.content.Intent
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.Socket
+import java.net.URI
+import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.regex.Pattern
 import kotlin.concurrent.thread
 
 /**
- * Runs the packaged Go binary (ELETROCROMO_NO_UI=1) and surfaces the
- * ELETROCROMO_READY line to MainActivity for WebView load.
+ * Runs the packaged Go binary (ELETROCROMO_NO_UI=1), learns the READY URL
+ * (stdout and/or ready file), then hands it to MainActivity for WebView.
+ *
+ * Loopback must stay on-device: always 127.0.0.1 + Proxy.NO_PROXY. A VPN
+ * (e.g. Tailscale) must not be required off and must not break localhost;
+ * if a system HTTP proxy black-holes probes we still load WebView.
  */
 class ServerService : Service() {
     interface Listener {
+        fun onStatus(message: String)
         fun onReady(url: String)
         fun onFailed(message: String)
     }
@@ -55,45 +69,206 @@ class ServerService : Service() {
         }
     }
 
+    /** Kill Go process and start again (Retry after failure). */
+    fun restart() {
+        process?.destroy()
+        process = null
+        readyUrl = null
+        lastError = null
+        started.set(false)
+        ensureStarted()
+    }
+
     private fun runServer() {
+        val readyFile = File(filesDir, "eletrocromo-ready.url")
         try {
+            readyFile.delete()
+            listener?.onStatus(getString(R.string.status_binding))
             val bin = resolveBinary()
             val pb = ProcessBuilder(bin.absolutePath)
             pb.directory(filesDir)
             pb.redirectErrorStream(true)
-            pb.environment()["ELETROCROMO_NO_UI"] = "1"
-            pb.environment()["ELETROCROMO_NO_ENSURE"] = "1"
+            val env = pb.environment()
+            env["ELETROCROMO_NO_UI"] = "1"
+            env["ELETROCROMO_NO_ENSURE"] = "1"
+            env["ELETROCROMO_READY_FILE"] = readyFile.absolutePath
+            env["HOME"] = filesDir.absolutePath
+            env["TMPDIR"] = cacheDir.absolutePath
+            // Child must not send loopback through a proxy either.
+            env["NO_PROXY"] = "127.0.0.1,localhost,::1"
+            env["no_proxy"] = "127.0.0.1,localhost,::1"
+
             val proc = pb.start()
             process = proc
-            val reader = BufferedReader(InputStreamReader(proc.inputStream))
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                val text = line ?: continue
-                val idx = text.indexOf(READY_PREFIX)
-                if (idx >= 0) {
-                    val url = text.substring(idx + READY_PREFIX.length).trim()
-                    readyUrl = url
-                    listener?.onReady(url)
+
+            // Read stdout concurrently while also polling the ready file.
+            var stdoutUrl: String? = null
+            val readerThread = thread(name = "eletrocromo-stdout", isDaemon = true) {
+                try {
+                    val reader = BufferedReader(InputStreamReader(proc.inputStream))
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        val text = line ?: continue
+                        Log.i(TAG, "go: $text")
+                        val url = extractReadyUrl(text) ?: continue
+                        stdoutUrl = url
+                        break
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "stdout reader: $e")
                 }
             }
-            val code = proc.waitFor()
-            if (readyUrl == null) {
-                lastError = "process exited ($code) before READY"
-                listener?.onFailed(lastError!!)
+
+            val parsedUrl = waitForReadyUrl(readyFile, { stdoutUrl }, proc)
+            if (parsedUrl == null) {
+                val code = try {
+                    if (proc.isAlive) -1 else proc.exitValue()
+                } catch (_: Exception) {
+                    -1
+                }
+                fail("no ELETROCROMO_READY (exit=$code)")
+                return
+            }
+
+            val loopbackUrl = forceLoopbackUrl(parsedUrl)
+            Log.i(TAG, "ready url=$loopbackUrl")
+            listener?.onStatus(getString(R.string.status_connecting))
+
+            // Probe is best-effort. VPN/system proxies have black-holed Java
+            // HttpURLConnection/Socket to 127.0.0.1 while WebView still works.
+            val probe = probeLoopback(loopbackUrl)
+            Log.i(TAG, "loopback probe: $probe")
+            if (probe.startsWith("HTTP 401") || probe.startsWith("HTTP 403")) {
+                fail("$probe — auth token rejected")
+                return
+            }
+            // On timeout/connect errors: still open WebView (same UID loopback).
+            readyUrl = loopbackUrl
+            listener?.onReady(loopbackUrl)
+
+            readerThread.join(2_000)
+            proc.waitFor()
+            if (readyUrl != null) {
+                lastError = "server process exited"
             }
         } catch (e: Exception) {
-            lastError = e.message ?: e.toString()
-            listener?.onFailed(lastError!!)
+            fail(e.message ?: e.toString())
+        }
+    }
+
+    private fun waitForReadyUrl(
+        readyFile: File,
+        stdoutUrl: () -> String?,
+        proc: Process,
+    ): String? {
+        repeat(READY_WAIT_ATTEMPTS) {
+            stdoutUrl()?.let { return it }
+            if (readyFile.isFile && readyFile.length() > 0) {
+                val text = readyFile.readText().trim()
+                extractReadyUrl(READY_PREFIX + text)?.let { return it }
+                if (text.startsWith("http://") || text.startsWith("https://")) {
+                    return text.lineSequence().first().trim()
+                }
+            }
+            if (!proc.isAlive) {
+                // Last chance: file may have been written before exit.
+                if (readyFile.isFile) {
+                    val text = readyFile.readText().trim()
+                    if (text.startsWith("http")) return text.lineSequence().first().trim()
+                }
+                return stdoutUrl()
+            }
+            Thread.sleep(50)
+        }
+        return stdoutUrl()
+    }
+
+    private fun fail(message: String) {
+        Log.e(TAG, message)
+        lastError = message
+        listener?.onFailed(message)
+    }
+
+    /**
+     * Accept either a bare READY line or one embedded in log timestamps:
+     *   ELETROCROMO_READY http://127.0.0.1:1234/?token=…
+     */
+    private fun extractReadyUrl(text: String): String? {
+        val idx = text.indexOf(READY_PREFIX)
+        if (idx < 0) return null
+        val rest = text.substring(idx + READY_PREFIX.length).trim()
+        val m = URL_IN_LINE.matcher(rest)
+        if (m.find()) {
+            return m.group()
+        }
+        val token = rest.split(Regex("\\s+")).firstOrNull().orEmpty()
+        return token.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+    }
+
+    /**
+     * Rewrite host to literal 127.0.0.1 so MagicDNS / VPN resolvers cannot
+     * steal "localhost".
+     */
+    private fun forceLoopbackUrl(raw: String): String {
+        return try {
+            val u = URI(raw)
+            val port = if (u.port > 0) u.port else 80
+            val q = u.rawQuery?.let { "?$it" } ?: ""
+            val frag = u.rawFragment?.let { "#$it" } ?: ""
+            val path = u.rawPath.orEmpty().ifEmpty { "/" }
+            "http://127.0.0.1:$port$path$q$frag"
+        } catch (_: Exception) {
+            raw.replace("://localhost", "://127.0.0.1")
+                .replace("://[::1]", "://127.0.0.1")
+        }
+    }
+
+    /**
+     * Best-effort health check. Returns a short status string.
+     * Never throws. VPN-safe: Proxy.NO_PROXY + literal 127.0.0.1 bytes.
+     */
+    private fun probeLoopback(url: String): String {
+        val port = try {
+            val p = URI(url).port
+            if (p > 0) p else 80
+        } catch (_: Exception) {
+            80
+        }
+        val loop = InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1))
+
+        // TCP first (no HTTP proxy involvement).
+        try {
+            Socket().use { sock ->
+                sock.connect(InetSocketAddress(loop, port), 400)
+            }
+        } catch (e: Exception) {
+            // Continue to HTTP — some stacks fail Socket but allow URLConnection.
+            Log.w(TAG, "tcp probe: $e")
+        }
+
+        return try {
+            val conn = (URL(url).openConnection(Proxy.NO_PROXY) as HttpURLConnection).apply {
+                instanceFollowRedirects = false
+                connectTimeout = 800
+                readTimeout = 800
+                requestMethod = "GET"
+                setRequestProperty("Connection", "close")
+                useCaches = false
+            }
+            try {
+                val code = conn.responseCode
+                "HTTP $code"
+            } finally {
+                conn.disconnect()
+            }
+        } catch (e: Exception) {
+            "error: ${e.message ?: e}"
         }
     }
 
     /**
      * Native libs ship as libeletrocromo.so under jniLibs/<abi>/.
-     *
-     * Run **in place** from [ApplicationInfo.nativeLibraryDir]. Copying to
-     * filesDir and chmod +x fails on modern Android with EACCES (-13): app
-     * private data is often mounted noexec. Extracted native lib dirs stay
-     * executable when extractNativeLibs / useLegacyPackaging is enabled.
+     * Run in place from nativeLibraryDir (filesDir is often noexec).
      */
     private fun resolveBinary(): File {
         val abi = Build.SUPPORTED_ABIS.firstOrNull()
@@ -103,9 +278,9 @@ class ServerService : Service() {
         if (!bin.exists()) {
             throw IllegalStateException("missing libeletrocromo.so for abi=$abi path=$nativeDir")
         }
-        // Best-effort; system-owned lib path may ignore this.
-        bin.setReadable(true)
-        bin.setExecutable(true)
+        // setExecutable often denied by SELinux on apk_data_file; ignore.
+        @Suppress("UNUSED_VARIABLE")
+        val ignored = bin.setReadable(true)
         return bin
     }
 
@@ -145,7 +320,11 @@ class ServerService : Service() {
     }
 
     companion object {
+        private const val TAG = "eletrocromo"
         private const val NOTIFICATION_ID = 7701
         private const val READY_PREFIX = "ELETROCROMO_READY "
+        private const val READY_WAIT_ATTEMPTS = 200 // ~10s at 50ms
+        private val URL_IN_LINE: Pattern =
+            Pattern.compile("https?://[^\\s\"'<>]+")
     }
 }

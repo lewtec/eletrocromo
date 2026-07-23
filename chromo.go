@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -175,12 +176,30 @@ func (a *App) Run() error {
 	}()
 
 	<-started
-	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
+	// Prefer 127.0.0.1 host for Android WebView + networkSecurityConfig (not [::1]).
+	base := ts.URL
+	if u, err := url.Parse(ts.URL); err == nil {
+		host := u.Hostname()
+		if host == "" || host == "localhost" || host == "::1" {
+			u.Host = net.JoinHostPort("127.0.0.1", u.Port())
+			base = u.String()
+		}
+	}
+	link := fmt.Sprintf("%s/?token=%s", strings.TrimRight(base, "/"), a.AuthToken)
 	log.Printf("webserver started on %s", link)
 
 	if noUI {
-		// Stable, machine-parseable line for Android WebView host (and tooling).
+		// Machine-parseable line on stdout without log timestamps (Android host).
+		// Also log for humans / tests that capture log.Writer().
+		fmt.Fprintln(os.Stdout, ReadyLinePrefix+link)
 		log.Print(ReadyLinePrefix + link)
+		// Optional side channel: write the URL to a file (stdout can block or be
+		// lost under ProcessBuilder; Android shell sets ELETROCROMO_READY_FILE).
+		if path := strings.TrimSpace(os.Getenv("ELETROCROMO_READY_FILE")); path != "" {
+			if err := os.WriteFile(path, []byte(link+"\n"), 0o600); err != nil {
+				log.Printf("ELETROCROMO_READY_FILE: %v", err)
+			}
+		}
 		<-ctx.Done()
 		a.WaitGroup.Wait()
 		return nil
