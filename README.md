@@ -41,6 +41,12 @@ mise run example:counter
 
 Ctrl+C in the terminal stops the process. `+` / `−` / reset hit the local server via form POST.
 
+Background ticker (goroutine +1/s; read-only template at `GET /`):
+
+```bash
+mise run example:ticker
+```
+
 ### Astro + orvalho workers
 
 Astro **SSR** (Cloudflare adapter; cat fact in frontmatter per request) hosted by [orvalho `pkg/workers`](https://github.com/lucasew/orvalho) and opened via eletrocromo.

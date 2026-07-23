@@ -8,6 +8,7 @@ golangci-lint = "2.12.2"
 "install:examples" = """
 go -C examples/basic mod download
 go -C examples/counter mod download
+go -C examples/ticker mod download
 """
 install = { depends = ["install:*"] }
 lint = "workspaced codebase lint --review"
@@ -36,6 +37,7 @@ go run ./cmd/eletrocromo android build \
 # Dogfood host resolve + Helium --app (Ctrl+C to quit).
 "example:basic" = "go -C examples/basic run ."
 "example:counter" = "go -C examples/counter run ."
+"example:ticker" = "go -C examples/ticker run ."
 
 # Astro + orvalho: tools/tasks live in examples/astro/mise.toml
 "example:astro:build" = "mise -C examples/astro run build"
