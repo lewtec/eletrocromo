@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -26,7 +28,18 @@ type App struct {
 	AuthToken string
 	WaitGroup sync.WaitGroup
 	Context   context.Context
+
+	// NoUI skips Helium resolve/launch and only serves loopback HTTP.
+	// Used by the Android WebView host (and tests). Also enabled when
+	// ELETROCROMO_NO_UI is 1/true/yes.
+	NoUI bool
 }
+
+// ReadyLinePrefix is printed once the loopback server is listening in NoUI mode.
+// The Android shell parses the following URL (token included) to open WebView.
+//
+//	ELETROCROMO_READY http://127.0.0.1:PORT/?token=UUID
+const ReadyLinePrefix = "ELETROCROMO_READY "
 
 const AUTH_COOKIE_KEY = "eletrocromo_token"
 
@@ -96,7 +109,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Run starts the application and blocks until the context is cancelled.
 //
-// Startup Sequence:
+// Startup Sequence (desktop):
 //  1. Validates App.ID (reverse-domain) and prepares an isolated Helium profile.
 //  2. Generates a new random AuthToken if one is not already set.
 //  3. Resolves Helium (local PATH or workspaced ensure) — before binding any port.
@@ -105,12 +118,10 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //     exits during a short startup grace (launch failures are not ignored).
 //  6. Blocks until the context is cancelled (including Helium exit), then waits
 //     for background tasks and shuts down the server.
+//
+// NoUI / ELETROCROMO_NO_UI: skip Helium; bind, print ReadyLinePrefix + URL, wait.
 func (a *App) Run() error {
 	if err := ValidateAppID(a.ID); err != nil {
-		return err
-	}
-	profileDir, err := ProfileDir(a.ID)
-	if err != nil {
 		return err
 	}
 
@@ -129,15 +140,26 @@ func (a *App) Run() error {
 	a.Context = ctx
 	defer func() { a.Context = prevCtx }()
 
-	// Resolve Helium first: ensure can take a long time (download workspaced +
-	// helium-browser). Do not open a listening server until we know we can
-	// open a window; failures must not leave a loopback port up with a token.
-	log.Printf("resolving Helium host…")
-	bin, err := resolveBrowserHost(ctx)
-	if err != nil {
-		return err
+	noUI := a.NoUI || noUIEnabled()
+
+	var profileDir string
+	var bin string
+	if !noUI {
+		var err error
+		profileDir, err = ProfileDir(a.ID)
+		if err != nil {
+			return err
+		}
+		// Resolve Helium first: ensure can take a long time (download workspaced +
+		// helium-browser). Do not open a listening server until we know we can
+		// open a window; failures must not leave a loopback port up with a token.
+		log.Printf("resolving Helium host…")
+		bin, err = resolveBrowserHost(ctx)
+		if err != nil {
+			return err
+		}
+		log.Printf("Helium host: %s (profile %s)", bin, profileDir)
 	}
-	log.Printf("Helium host: %s (profile %s)", bin, profileDir)
 
 	ts := httptest.NewUnstartedServer(a)
 	ts.Config.BaseContext = func(_ net.Listener) context.Context {
@@ -155,6 +177,14 @@ func (a *App) Run() error {
 	<-started
 	link := fmt.Sprintf("%s/?token=%s", ts.URL, a.AuthToken)
 	log.Printf("webserver started on %s", link)
+
+	if noUI {
+		// Stable, machine-parseable line for Android WebView host (and tooling).
+		log.Print(ReadyLinePrefix + link)
+		<-ctx.Done()
+		a.WaitGroup.Wait()
+		return nil
+	}
 
 	win, err := startAppWindow(bin, link, profileDir)
 	if err != nil {
@@ -183,4 +213,9 @@ func (a *App) Run() error {
 	win.stop()
 	a.WaitGroup.Wait()
 	return nil
+}
+
+func noUIEnabled() bool {
+	v := strings.TrimSpace(os.Getenv("ELETROCROMO_NO_UI"))
+	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
 }

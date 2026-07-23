@@ -56,3 +56,36 @@ mise run run     # go run with embedded guest
 ```
 
 Needs a local orvalho checkout (see `examples/astro/go.mod` `replace`). Details: [examples/astro/README.md](examples/astro/README.md).
+
+## CLI (`cmd/eletrocromo`)
+
+Cobra tooling binary (separate from the importable library):
+
+```bash
+go run ./cmd/eletrocromo --help
+go run ./cmd/eletrocromo android create --help
+```
+
+### Android APK host (generator)
+
+Ad-hoc Android projects (WebView + multiarch Go binary), PhoneGap/Expo-style,
+keyed by reverse-domain package id (`App.ID`):
+
+```bash
+go run ./cmd/eletrocromo android create \
+  --id br.tec.lew.eletrocromo.counter \
+  --name Counter \
+  --go-main ../../examples/counter \
+  --out dist/android-counter
+
+# dogfood shortcut:
+mise run apk:counter
+```
+
+Then in the generated tree: `./scripts/build-go.sh` (needs `GOOS=android`) and
+`gradle wrapper && ./gradlew assembleDebug`. The Go process must run with
+`ELETROCROMO_NO_UI=1` (set by the shell) so Helium is skipped and
+`ELETROCROMO_READY <url>` is printed for WebView.
+
+The generator lives in-repo (`internal/apkgen/`, `cmd/eletrocromo`); it does not pull
+the Android SDK into the core library.

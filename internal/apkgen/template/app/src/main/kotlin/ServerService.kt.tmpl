@@ -1,0 +1,150 @@
+package {{.PackageID}}
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Intent
+import android.os.Binder
+import android.os.Build
+import android.os.IBinder
+import androidx.core.app.NotificationCompat
+import java.io.BufferedReader
+import java.io.File
+import java.io.InputStreamReader
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
+
+/**
+ * Runs the packaged Go binary (ELETROCROMO_NO_UI=1) and surfaces the
+ * ELETROCROMO_READY line to MainActivity for WebView load.
+ */
+class ServerService : Service() {
+    interface Listener {
+        fun onReady(url: String)
+        fun onFailed(message: String)
+    }
+
+    inner class LocalBinder : Binder() {
+        fun getService(): ServerService = this@ServerService
+    }
+
+    private val binder = LocalBinder()
+    private val started = AtomicBoolean(false)
+    private var process: Process? = null
+    private var listener: Listener? = null
+    private var readyUrl: String? = null
+    private var lastError: String? = null
+
+    fun setListener(l: Listener?) {
+        listener = l
+        readyUrl?.let { l?.onReady(it) }
+        lastError?.let { l?.onFailed(it) }
+    }
+
+    fun ensureStarted() {
+        if (!started.compareAndSet(false, true)) {
+            readyUrl?.let { listener?.onReady(it) }
+            lastError?.let { listener?.onFailed(it) }
+            return
+        }
+        startForeground(NOTIFICATION_ID, buildNotification())
+        thread(name = "eletrocromo-server", isDaemon = true) {
+            runServer()
+        }
+    }
+
+    private fun runServer() {
+        try {
+            val bin = resolveBinary()
+            val pb = ProcessBuilder(bin.absolutePath)
+            pb.directory(filesDir)
+            pb.redirectErrorStream(true)
+            pb.environment()["ELETROCROMO_NO_UI"] = "1"
+            pb.environment()["ELETROCROMO_NO_ENSURE"] = "1"
+            val proc = pb.start()
+            process = proc
+            val reader = BufferedReader(InputStreamReader(proc.inputStream))
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                val text = line ?: continue
+                val idx = text.indexOf(READY_PREFIX)
+                if (idx >= 0) {
+                    val url = text.substring(idx + READY_PREFIX.length).trim()
+                    readyUrl = url
+                    listener?.onReady(url)
+                }
+            }
+            val code = proc.waitFor()
+            if (readyUrl == null) {
+                lastError = "process exited ($code) before READY"
+                listener?.onFailed(lastError!!)
+            }
+        } catch (e: Exception) {
+            lastError = e.message ?: e.toString()
+            listener?.onFailed(lastError!!)
+        }
+    }
+
+    /**
+     * Native libs ship as libeletrocromo.so under jniLibs/<abi>/.
+     * Copy to a private executable path (Android may mark lib dirs noexec).
+     */
+    private fun resolveBinary(): File {
+        val abi = Build.SUPPORTED_ABIS.firstOrNull()
+            ?: throw IllegalStateException("no supported ABI")
+        val nativeDir = applicationInfo.nativeLibraryDir
+        val src = File(nativeDir, "libeletrocromo.so")
+        if (!src.exists()) {
+            throw IllegalStateException("missing libeletrocromo.so for abi=$abi path=$nativeDir")
+        }
+        val dst = File(filesDir, "eletrocromo-server")
+        src.inputStream().use { input ->
+            dst.outputStream().use { output -> input.copyTo(output) }
+        }
+        dst.setReadable(true, true)
+        dst.setExecutable(true, true)
+        return dst
+    }
+
+    private fun buildNotification(): Notification {
+        val channelId = "eletrocromo_server"
+        val nm = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    channelId,
+                    getString(R.string.server_notification_title),
+                    NotificationManager.IMPORTANCE_LOW,
+                ),
+            )
+        }
+        val open = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(this, channelId)
+            .setContentTitle(getString(R.string.server_notification_title))
+            .setContentText(getString(R.string.server_notification_text))
+            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setContentIntent(open)
+            .setOngoing(true)
+            .build()
+    }
+
+    override fun onBind(intent: Intent?): IBinder = binder
+
+    override fun onDestroy() {
+        process?.destroy()
+        process = null
+        super.onDestroy()
+    }
+
+    companion object {
+        private const val NOTIFICATION_ID = 7701
+        private const val READY_PREFIX = "ELETROCROMO_READY "
+    }
+}
