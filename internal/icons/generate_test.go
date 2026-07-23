@@ -111,3 +111,28 @@ func TestDefaultMarkEmbed(t *testing.T) {
 		t.Fatal("default lockup embed empty")
 	}
 }
+
+func TestKnockoutBackgroundLightCanvas(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 32, 32))
+	// white canvas
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 32; x++ {
+			img.Set(x, y, color.NRGBA{R: 255, G: 255, B: 255, A: 255})
+		}
+	}
+	// blue blob in center
+	for y := 10; y < 22; y++ {
+		for x := 10; x < 22; x++ {
+			img.Set(x, y, color.NRGBA{B: 200, A: 255})
+		}
+	}
+	out := KnockoutBackground(img)
+	_, _, _, a0 := out.At(0, 0).RGBA()
+	if a0 != 0 {
+		t.Fatalf("corner should be transparent, a=%d", a0>>8)
+	}
+	_, _, _, ac := out.At(16, 16).RGBA()
+	if ac < 0x8000 {
+		t.Fatalf("center should stay opaque, a=%d", ac>>8)
+	}
+}

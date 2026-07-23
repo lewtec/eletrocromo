@@ -19,7 +19,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -27,8 +26,8 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 /**
  * Thin WebView shell. The Go binary owns HTTP + auth; this activity only
- * shows a splash until READY, then loads the token URL. Pull-to-refresh
- * reloads the page (SSR apps like cat facts get a new response).
+ * shows a splash (centered logo, status under it) until READY, then loads
+ * the token URL. Pull-to-refresh reloads the page (SSR gets a new response).
  */
 class MainActivity : AppCompatActivity() {
     private var webView: WebView? = null
@@ -37,7 +36,7 @@ class MainActivity : AppCompatActivity() {
     private var appUrl: String? = null
     private var pageHadError = false
 
-    private lateinit var splash: LinearLayout
+    private lateinit var splash: View
     private lateinit var splashStatus: TextView
     private lateinit var splashDetail: TextView
     private lateinit var splashProgress: ProgressBar

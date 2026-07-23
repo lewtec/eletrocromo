@@ -73,6 +73,8 @@ func Generate(opts Options) (*Manifest, error) {
 		}
 	}
 
+	// Knock out light photo canvas so splash/launcher icons are not boxed.
+	img = KnockoutBackground(img)
 	square := PadCenter(img)
 	// Work from a high-res square for downscales
 	if square.Bounds().Dx() < 1024 {

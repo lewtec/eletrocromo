@@ -62,6 +62,70 @@ func PadCenter(src image.Image) *image.NRGBA {
 	return dst
 }
 
+// KnockoutBackground makes pixels near the corner sample color transparent
+// (soft edge). Used so launcher/splash marks are not sitting on a white box.
+// Corners of photo-style logos are usually the canvas; solid brand marks are
+// left alone if the corner is not near-white/near-uniform.
+func KnockoutBackground(src image.Image) *image.NRGBA {
+	b := src.Bounds()
+	dst := image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	// Sample a few corners; use average if similar.
+	samples := []image.Point{
+		{b.Min.X, b.Min.Y},
+		{b.Max.X - 1, b.Min.Y},
+		{b.Min.X, b.Max.Y - 1},
+		{b.Max.X - 1, b.Max.Y - 1},
+	}
+	var sr, sg, sb, n int
+	for _, p := range samples {
+		r, g, bl, a := src.At(p.X, p.Y).RGBA()
+		if a < 0x8000 {
+			continue // already transparent corner
+		}
+		sr += int(r >> 8)
+		sg += int(g >> 8)
+		sb += int(bl >> 8)
+		n++
+	}
+	if n == 0 {
+		draw.Draw(dst, dst.Bounds(), src, b.Min, draw.Src)
+		return dst
+	}
+	cr, cg, cb := sr/n, sg/n, sb/n
+	// Only knock out light canvases (avoid eating dark logos).
+	if cr+cg+cb < 200*3 {
+		draw.Draw(dst, dst.Bounds(), src, b.Min, draw.Src)
+		return dst
+	}
+
+	const hard, soft = 28.0, 58.0
+	hs, ss := hard*hard, soft*soft
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r16, g16, b16, a16 := src.At(x, y).RGBA()
+			r, g, bl, a := int(r16>>8), int(g16>>8), int(b16>>8), int(a16>>8)
+			dr, dg, db := float64(r-cr), float64(g-cg), float64(bl-cb)
+			d := dr*dr + dg*dg + db*db
+			var alpha uint8
+			switch {
+			case d <= hs:
+				alpha = 0
+			case d >= ss:
+				alpha = uint8(a)
+			default:
+				t := (d - hs) / (ss - hs)
+				alpha = uint8(float64(a) * t)
+			}
+			if alpha == 0 {
+				dst.SetNRGBA(x-b.Min.X, y-b.Min.Y, color.NRGBA{})
+			} else {
+				dst.SetNRGBA(x-b.Min.X, y-b.Min.Y, color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(bl), A: alpha})
+			}
+		}
+	}
+	return dst
+}
+
 // Resize returns a size×size NRGBA using CatmullRom.
 func Resize(src image.Image, size int) *image.NRGBA {
 	dst := image.NewNRGBA(image.Rect(0, 0, size, size))
