@@ -33,6 +33,7 @@ type fileConfig struct {
 	VersionName   string   `json:"version_name"`
 	VersionCode   int      `json:"version_code"`
 	GoMain        string   `json:"go_main"`
+	Icon          string   `json:"icon,omitempty"`
 	Generator     string   `json:"generator,omitempty"`
 	ABIs          []string `json:"abis,omitempty"`
 }
@@ -70,6 +71,7 @@ func LoadConfig(path string) (cfg Config, baseDir string, err error) {
 		VersionName: doc.VersionName,
 		VersionCode: doc.VersionCode,
 		GoMain:      doc.GoMain,
+		Icon:        doc.Icon,
 		ABIs:        doc.ABIs,
 	}
 	return cfg, baseDir, nil
@@ -92,6 +94,9 @@ func Merge(base, overlay Config) Config {
 	}
 	if strings.TrimSpace(overlay.GoMain) != "" {
 		out.GoMain = overlay.GoMain
+	}
+	if strings.TrimSpace(overlay.Icon) != "" {
+		out.Icon = overlay.Icon
 	}
 	if len(overlay.ABIs) > 0 {
 		out.ABIs = append([]string(nil), overlay.ABIs...)
@@ -143,6 +148,7 @@ func encodeConfigJSON(cfg Config, generator string) ([]byte, error) {
 		VersionName:   cfg.VersionName,
 		VersionCode:   cfg.VersionCode,
 		GoMain:        cfg.GoMain,
+		Icon:          cfg.Icon,
 		Generator:     generator,
 		ABIs:          abis,
 	}

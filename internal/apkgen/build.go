@@ -8,8 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lewtec/eletrocromo/internal/icons"
 	"github.com/lewtec/eletrocromo/internal/version"
 )
+
+func applyIconMipmaps(iconRoot, androidResDir string) error {
+	return icons.ApplyAndroidRes(iconRoot, androidResDir)
+}
 
 // BuildOptions drives a full Android APK build from an eletrocromo app.
 type BuildOptions struct {
@@ -25,6 +30,8 @@ type BuildOptions struct {
 	OutAPK string
 	// GoOnly stops after multiarch libeletrocromo.so (no Gradle / no SDK).
 	GoOnly bool
+	// IconRoot is a dist/icons tree with android/mipmap-* (optional; if empty, no mipmaps).
+	IconRoot string
 	// Stdout/Stderr for subprocess logs (default os.Stdout/Stderr).
 	Stdout io.Writer
 	Stderr io.Writer
@@ -102,6 +109,23 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		Config: genCfg,
 	}); err != nil {
 		buildErr = fmt.Errorf("generate host: %w", err)
+		return nil, buildErr
+	}
+
+	// Manifest expects @mipmap/ic_launcher — always install mipmaps.
+	iconRoot := strings.TrimSpace(opts.IconRoot)
+	if iconRoot == "" {
+		tmpIcons := filepath.Join(workDir, ".eletrocromo-icons")
+		if _, err := icons.Generate(icons.Options{OutputDir: tmpIcons, Force: true}); err != nil {
+			buildErr = fmt.Errorf("default icons: %w", err)
+			return nil, buildErr
+		}
+		iconRoot = tmpIcons
+	}
+	resDir := filepath.Join(workDir, "app", "src", "main", "res")
+	fmt.Fprintf(stdout, "eletrocromo: applying launcher icons from %s\n", iconRoot)
+	if err := applyIconMipmaps(iconRoot, resDir); err != nil {
+		buildErr = err
 		return nil, buildErr
 	}
 

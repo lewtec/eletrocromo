@@ -37,6 +37,9 @@ type Config struct {
 	// GoMain is a path (often relative to the config file or generated host)
 	// to the Go main package directory.
 	GoMain string `json:"go_main"`
+	// Icon is an optional path to a master PNG/JPEG (relative to config dir).
+	// Empty → packaging CLI uses the embedded default mark.
+	Icon string `json:"icon,omitempty"`
 	// ABIs lists Android ABIs for the fat APK (default DefaultABIs).
 	ABIs []string `json:"abis,omitempty"`
 }

@@ -27,17 +27,18 @@ ci = { depends = ["lint", "test"] }
 # Build multiarch debug APK for the counter dogfood (needs ANDROID_HOME + JDK + Gradle).
 # Falls back to --go-only host tree when SDK is missing is not automatic; use apk:counter:go.
 "apk:counter" = """
-go run ./cmd/eletrocromo android build \
+go run ./cmd/eletrocromo build android \
   --config examples/counter/eletrocromo.json \
   --out dist/counter-debug.apk \
   --workdir dist/android-counter
 """
 "apk:counter:go" = """
-go run ./cmd/eletrocromo android build \
+go run ./cmd/eletrocromo build android \
   --config examples/counter/eletrocromo.json \
   --go-only \
   --workdir dist/android-counter
 """
+"icons" = "go run ./cmd/eletrocromo build icons --refresh-icons"
 
 # Dogfood host resolve + Helium --app (Ctrl+C to quit).
 "example:basic" = "go -C examples/basic run ."

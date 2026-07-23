@@ -70,9 +70,29 @@ Cobra tooling binary (separate from the importable library):
 ```bash
 go run ./cmd/eletrocromo --help
 go run ./cmd/eletrocromo version
-go run ./cmd/eletrocromo android create --help
+go run ./cmd/eletrocromo build icons          # → dist/icons (default mark or config icon)
+go run ./cmd/eletrocromo build android       # JIT APK; generates icons if missing
 # or: mise run build:cli && ./bin/eletrocromo version
 ```
+
+### App icons
+
+One master **PNG/JPEG** (or the shipped default mark) → full matrix under `dist/icons/`:
+
+`windows/`, `macos/`, `linux/`, `android/` mipmaps, `web/`, `manifest.json`.
+
+```bash
+# default mark
+go run ./cmd/eletrocromo build icons --output dist/icons
+
+# app master (also: "icon" in eletrocromo.json)
+go run ./cmd/eletrocromo build icons --icon assets/logo.png
+
+# force rebuild
+go run ./cmd/eletrocromo build icons --refresh-icons
+```
+
+Wire paths into GoReleaser yourself (`before.hooks`, Pro `app_bundles.icon`, nFPM, …). See [SPEC.md](SPEC.md) packaging section. SVG masters: convert to PNG first for now.
 
 ### Release
 
@@ -109,11 +129,11 @@ cross-compiles multiarch Go (`GOOS=android`), and runs Gradle:
 ```bash
 # from the app module:
 cd examples/counter
-go run ../../cmd/eletrocromo android build
-# → dist/counter-debug.apk (package id from eletrocromo.json)
+go run ../../cmd/eletrocromo build android
+# → dist/icons + dist/counter-debug.apk (package id from eletrocromo.json)
 
 # from repo root:
-go run ./cmd/eletrocromo android build \
+go run ./cmd/eletrocromo build android \
   --config examples/counter/eletrocromo.json \
   --out dist/counter-debug.apk
 
@@ -125,10 +145,11 @@ an NDK). Full APK also needs **JDK 17+**, **Android SDK** (`ANDROID_HOME`), and
 **Gradle 8.9+** on `PATH`. Without the SDK:
 
 ```bash
-go run ./cmd/eletrocromo android build --config examples/counter/eletrocromo.json --go-only --workdir dist/android-counter
+go run ./cmd/eletrocromo build android --config examples/counter/eletrocromo.json --go-only --workdir dist/android-counter
 ```
 
-`android create` still exists if you only want the Gradle tree. Runtime: the
-service sets `ELETROCROMO_NO_UI=1` and loads the `ELETROCROMO_READY` URL in
-WebView. Packaging lives in `internal/apkgen/` + `cmd/eletrocromo` (not in the
-core library import path for apps).
+Icons are generated when missing (`--refresh-icons` to force). Legacy
+`android build` / `android create` still work; prefer `build android`. Runtime:
+the service sets `ELETROCROMO_NO_UI=1` and loads the `ELETROCROMO_READY` URL in
+WebView. Packaging lives in `internal/apkgen/` + `internal/icons/` +
+`cmd/eletrocromo` (not in the core library import path for apps).

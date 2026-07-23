@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestRoot_HelpListsAndroid(t *testing.T) {
+func TestRoot_HelpListsBuild(t *testing.T) {
 	cmd := newRootCmd()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -18,8 +18,38 @@ func TestRoot_HelpListsAndroid(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := out.String()
-	if !strings.Contains(s, "android") {
-		t.Fatalf("help missing android:\n%s", s)
+	if !strings.Contains(s, "build") {
+		t.Fatalf("help missing build:\n%s", s)
+	}
+}
+
+func TestBuild_BareErrors(t *testing.T) {
+	cmd := newRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"build"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for bare build")
+	}
+	if !strings.Contains(err.Error(), "icons") {
+		t.Fatalf("error should mention targets: %v", err)
+	}
+}
+
+func TestBuildIcons_Default(t *testing.T) {
+	dir := t.TempDir()
+	cmd := newRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"build", "icons", "--output", filepath.Join(dir, "icons"), "--refresh-icons"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("%v\n%s", err, out.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "icons", "manifest.json")); err != nil {
+		t.Fatal(err)
 	}
 }
 
