@@ -138,7 +138,7 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("bootstrap workspaced: download: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("bootstrap workspaced: download %s: HTTP %s", url, resp.Status)
 	}
@@ -152,7 +152,7 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 	w := io.MultiWriter(f, h)
 	body := newIdleTimeoutReader(resp.Body, downloadIdleTimeout)
 	if _, err := io.Copy(w, body); err != nil {
-		f.Close()
+		_ = f.Close()
 		_ = body.Close()
 		return "", fmt.Errorf("bootstrap workspaced: write archive: %w", err)
 	}
@@ -187,12 +187,12 @@ func extractTarGzBinary(archivePath, destPath, binName string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return err
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
@@ -214,7 +214,7 @@ func extractTarGzBinary(archivePath, destPath, binName string) error {
 			return err
 		}
 		if _, err := io.Copy(out, tr); err != nil {
-			out.Close()
+			_ = out.Close()
 			return err
 		}
 		return out.Close()
@@ -227,7 +227,7 @@ func extractZipBinary(archivePath, destPath, binName string) error {
 	if err != nil {
 		return err
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	for _, zf := range r.File {
 		base := filepath.Base(zf.Name)
 		if base != binName && base != "workspaced" && base != "workspaced.exe" {
@@ -239,11 +239,11 @@ func extractZipBinary(archivePath, destPath, binName string) error {
 		}
 		out, err := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 		if err != nil {
-			rc.Close()
+			_ = rc.Close()
 			return err
 		}
 		_, copyErr := io.Copy(out, rc)
-		rc.Close()
+		_ = rc.Close()
 		closeErr := out.Close()
 		if copyErr != nil {
 			return copyErr
