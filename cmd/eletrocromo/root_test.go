@@ -23,6 +23,20 @@ func TestRoot_HelpListsAndroid(t *testing.T) {
 	}
 }
 
+func TestVersionCmd(t *testing.T) {
+	cmd := newRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"version"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out.String()) == "" {
+		t.Fatal("empty version output")
+	}
+}
+
 func TestAndroidCreate_RequiredFlags(t *testing.T) {
 	cmd := newRootCmd()
 	var errBuf bytes.Buffer

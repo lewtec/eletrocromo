@@ -31,10 +31,13 @@ build_one() {
   local outdir="$ROOT/app/src/main/jniLibs/$abi"
   mkdir -p "$outdir"
   echo "→ $abi (GOARCH=$goarch)"
+  # Optional goreleaser-style stamps (set by `eletrocromo android build` env or export yourself):
+  #   ELETROCROMO_LDFLAGS='-s -w -X github.com/lewtec/eletrocromo/internal/version.Version=v1.0.0 …'
+  ldflags="${ELETROCROMO_LDFLAGS:--s -w}"
   (
     cd "$go_main"
     CGO_ENABLED=0 GOOS=android GOARCH="$goarch" \
-      go build -trimpath -ldflags="-s -w" \
+      go build -trimpath -ldflags="$ldflags" \
       -o "$outdir/libeletrocromo.so" \
       .
   )

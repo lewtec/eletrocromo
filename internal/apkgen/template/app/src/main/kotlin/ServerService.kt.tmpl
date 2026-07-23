@@ -89,23 +89,24 @@ class ServerService : Service() {
 
     /**
      * Native libs ship as libeletrocromo.so under jniLibs/<abi>/.
-     * Copy to a private executable path (Android may mark lib dirs noexec).
+     *
+     * Run **in place** from [ApplicationInfo.nativeLibraryDir]. Copying to
+     * filesDir and chmod +x fails on modern Android with EACCES (-13): app
+     * private data is often mounted noexec. Extracted native lib dirs stay
+     * executable when extractNativeLibs / useLegacyPackaging is enabled.
      */
     private fun resolveBinary(): File {
         val abi = Build.SUPPORTED_ABIS.firstOrNull()
             ?: throw IllegalStateException("no supported ABI")
         val nativeDir = applicationInfo.nativeLibraryDir
-        val src = File(nativeDir, "libeletrocromo.so")
-        if (!src.exists()) {
+        val bin = File(nativeDir, "libeletrocromo.so")
+        if (!bin.exists()) {
             throw IllegalStateException("missing libeletrocromo.so for abi=$abi path=$nativeDir")
         }
-        val dst = File(filesDir, "eletrocromo-server")
-        src.inputStream().use { input ->
-            dst.outputStream().use { output -> input.copyTo(output) }
-        }
-        dst.setReadable(true, true)
-        dst.setExecutable(true, true)
-        return dst
+        // Best-effort; system-owned lib path may ignore this.
+        bin.setReadable(true)
+        bin.setExecutable(true)
+        return bin
     }
 
     private fun buildNotification(): Notification {

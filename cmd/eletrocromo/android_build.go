@@ -71,20 +71,19 @@ Example (from examples/counter):
 			}
 
 			overlay := apkgen.Config{
-				PackageID:   id,
-				AppName:     name,
-				GoMain:      goMain,
-				VersionName: version,
+				PackageID: id,
+				AppName:   name,
+				GoMain:    goMain,
 			}
 			if cmd.Flags().Changed("code") {
 				overlay.VersionCode = code
 			}
+			if cmd.Flags().Changed("version") {
+				overlay.VersionName = version
+			}
 			// Only apply go-main overlay when flag set (default "." would clobber).
 			if !cmd.Flags().Changed("go-main") {
 				overlay.GoMain = ""
-			}
-			if !cmd.Flags().Changed("version") {
-				overlay.VersionName = ""
 			}
 			cfg = apkgen.Merge(cfg, overlay)
 
@@ -127,8 +126,8 @@ Example (from examples/counter):
 	cmd.Flags().StringVar(&id, "id", "", "package id / applicationId (overrides config)")
 	cmd.Flags().StringVar(&name, "name", "", "launcher label (overrides config)")
 	cmd.Flags().StringVar(&goMain, "go-main", ".", "Go main package directory (overrides config)")
-	cmd.Flags().StringVar(&version, "version", "0.1.0", "versionName (overrides config)")
-	cmd.Flags().IntVar(&code, "code", 1, "versionCode (overrides config)")
+	cmd.Flags().StringVar(&version, "version", "", "versionName (default: git describe / goreleaser -X / devel)")
+	cmd.Flags().IntVar(&code, "code", 0, "versionCode (default: semver map or git rev-list count)")
 	cmd.Flags().StringVar(&out, "out", "", "output APK path (default: dist/<name>-debug.apk)")
 	cmd.Flags().StringVar(&workDir, "workdir", "", "Gradle project dir (default: temp; kept if set)")
 	cmd.Flags().BoolVar(&keepWorkDir, "keep-workdir", false, "do not delete temp workdir after success")

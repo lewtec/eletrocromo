@@ -39,16 +39,21 @@ Example:
 			if err != nil {
 				return err
 			}
+			cfg := apkgen.Config{
+				PackageID: id,
+				AppName:   name,
+				GoMain:    goMain,
+			}
+			if cmd.Flags().Changed("version") {
+				cfg.VersionName = version
+			}
+			if cmd.Flags().Changed("code") {
+				cfg.VersionCode = code
+			}
 			if err := apkgen.Create(apkgen.Options{
 				OutDir: absOut,
 				Force:  force,
-				Config: apkgen.Config{
-					PackageID:   id,
-					AppName:     name,
-					VersionName: version,
-					VersionCode: code,
-					GoMain:      goMain,
-				},
+				Config: cfg,
 			}); err != nil {
 				return err
 			}
@@ -62,8 +67,8 @@ Example:
 	cmd.Flags().StringVar(&name, "name", "", "launcher label (default: last label of --id)")
 	cmd.Flags().StringVar(&out, "out", "", "output project directory (required)")
 	cmd.Flags().StringVar(&goMain, "go-main", ".", "Go main package directory (stored in eletrocromo.json)")
-	cmd.Flags().StringVar(&version, "version", "0.1.0", "Android versionName")
-	cmd.Flags().IntVar(&code, "code", 1, "Android versionCode")
+	cmd.Flags().StringVar(&version, "version", "", "Android versionName (default: from VCS / -X)")
+	cmd.Flags().IntVar(&code, "code", 0, "Android versionCode (default: from version / git)")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite non-empty --out")
 	_ = cmd.MarkFlagRequired("id")
 	_ = cmd.MarkFlagRequired("out")

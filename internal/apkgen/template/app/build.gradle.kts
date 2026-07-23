@@ -35,6 +35,8 @@ android {
             isEnable = false
         }
     }
+    // Extract jniLibs to the filesystem so ProcessBuilder can exec libeletrocromo.so
+    // (filesDir is often noexec; nativeLibraryDir must be a real extracted path).
     packaging {
         jniLibs {
             useLegacyPackaging = true

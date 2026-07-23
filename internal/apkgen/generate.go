@@ -17,6 +17,7 @@ import (
 	"text/template"
 
 	"github.com/lewtec/eletrocromo"
+	"github.com/lewtec/eletrocromo/internal/version"
 )
 
 //go:embed all:template
@@ -29,9 +30,9 @@ type Config struct {
 	PackageID string `json:"package_id"`
 	// AppName is the launcher label.
 	AppName string `json:"app_name"`
-	// VersionName is Android versionName (default "0.1.0").
+	// VersionName is Android versionName. Empty → derived (git describe / -X / devel).
 	VersionName string `json:"version_name"`
-	// VersionCode is Android versionCode (default 1).
+	// VersionCode is Android versionCode. Empty/0 → semver map or git rev-list count.
 	VersionCode int `json:"version_code"`
 	// GoMain is a path (often relative to the config file or generated host)
 	// to the Go main package directory.
@@ -100,11 +101,15 @@ func normalizeConfig(cfg Config) (Config, error) {
 		parts := strings.Split(cfg.PackageID, ".")
 		cfg.AppName = parts[len(parts)-1]
 	}
-	if cfg.VersionName == "" {
-		cfg.VersionName = "0.1.0"
-	}
-	if cfg.VersionCode <= 0 {
-		cfg.VersionCode = 1
+	// Version defaults: prefer goreleaser-style / VCS identity over a fake 0.1.0.
+	if cfg.VersionName == "" || cfg.VersionCode <= 0 {
+		info := version.Resolve()
+		if cfg.VersionName == "" {
+			cfg.VersionName = info.AndroidName()
+		}
+		if cfg.VersionCode <= 0 {
+			cfg.VersionCode = version.AndroidCodeFrom(info.Version, 0)
+		}
 	}
 	if strings.TrimSpace(cfg.GoMain) == "" {
 		cfg.GoMain = "."

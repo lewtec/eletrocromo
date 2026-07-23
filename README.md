@@ -63,8 +63,22 @@ Cobra tooling binary (separate from the importable library):
 
 ```bash
 go run ./cmd/eletrocromo --help
+go run ./cmd/eletrocromo version
 go run ./cmd/eletrocromo android create --help
 ```
+
+Version uses the usual Go release stamps (`internal/version`):
+
+```text
+-X github.com/lewtec/eletrocromo/internal/version.Version={{.Version}}
+-X github.com/lewtec/eletrocromo/internal/version.Commit={{.Commit}}
+-X github.com/lewtec/eletrocromo/internal/version.Date={{.Date}}
+-X github.com/lewtec/eletrocromo/internal/version.BuiltBy=goreleaser
+```
+
+When unset, `version` / Android `versionName` fall back to module build info and
+`git describe` in the app tree; `versionCode` from semver (`MMmmpp`) or
+`git rev-list --count`.
 
 ### Android APK (straight build)
 

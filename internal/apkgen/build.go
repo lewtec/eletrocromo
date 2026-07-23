@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/lewtec/eletrocromo/internal/version"
 )
 
 // BuildOptions drives a full Android APK build from an eletrocromo app.
@@ -66,6 +68,16 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, err
 	}
 
+	// Stamp version from app tree (git describe) when config omitted version_*.
+	vi := version.ResolveDir(goMain)
+	if strings.TrimSpace(opts.Config.VersionName) == "" {
+		cfg.VersionName = vi.AndroidName()
+	}
+	if opts.Config.VersionCode <= 0 {
+		cfg.VersionCode = version.AndroidCodeFrom(vi.Version, version.GitCommitCount(goMain))
+	}
+	fmt.Fprintf(stdout, "eletrocromo: version %s (code %d)\n", cfg.VersionName, cfg.VersionCode)
+
 	workDir, ephemeral, err := resolveWorkDir(opts)
 	if err != nil {
 		return nil, err
@@ -94,7 +106,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	}
 
 	fmt.Fprintf(stdout, "eletrocromo: building Go binary for %v\n", genCfg.abis())
-	libs, err := BuildGoLibs(workDir, goMain, genCfg.abis(), stdout, stderr)
+	libs, err := BuildGoLibs(workDir, goMain, genCfg.abis(), vi, stdout, stderr)
 	if err != nil {
 		buildErr = err
 		return nil, buildErr
@@ -155,10 +167,12 @@ func resolveWorkDir(opts BuildOptions) (workDir string, cleanup bool, err error)
 }
 
 // BuildGoLibs cross-compiles the app into workDir/app/src/main/jniLibs/<abi>/libeletrocromo.so.
-func BuildGoLibs(workDir, goMainDir string, abis []string, stdout, stderr io.Writer) ([]string, error) {
+// stamp is injected via -ldflags -X (goreleaser-style) when apps import internal/version.
+func BuildGoLibs(workDir, goMainDir string, abis []string, stamp version.Info, stdout, stderr io.Writer) ([]string, error) {
 	if len(abis) == 0 {
 		abis = DefaultABIs
 	}
+	ldflags := stamp.GoBuildLdflags()
 	var out []string
 	for _, abi := range abis {
 		goarch, ok := abiToGOARCH[abi]
@@ -171,7 +185,7 @@ func BuildGoLibs(workDir, goMainDir string, abis []string, stdout, stderr io.Wri
 		}
 		dest := filepath.Join(destDir, "libeletrocromo.so")
 		fmt.Fprintf(stdout, "  → %s (GOARCH=%s)\n", abi, goarch)
-		cmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", dest, ".")
+		cmd := exec.Command("go", "build", "-trimpath", "-ldflags", ldflags, "-o", dest, ".")
 		cmd.Dir = goMainDir
 		cmd.Env = append(os.Environ(),
 			"CGO_ENABLED=0",

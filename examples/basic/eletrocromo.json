@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "package_id": "br.tec.lew.eletrocromo.basic",
+  "app_name": "Basic",
+  "go_main": ".",
+  "abis": ["arm64-v8a"]
+}
