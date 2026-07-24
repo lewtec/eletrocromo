@@ -49,11 +49,11 @@ SVG is not rasterized in-process yet — convert to PNG/JPEG first
 				return err
 			}
 			if !refresh && icons.Complete(out) && man != nil {
-				fmt.Fprintf(cmd.OutOrStdout(), "icons up to date: %s\n", man.OutputDir)
+				_, err = fmt.Fprintf(cmd.OutOrStdout(), "icons up to date: %s\n", man.OutputDir)
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "ok %s (%d files)\n", man.OutputDir, len(man.Files))
+				_, err = fmt.Fprintf(cmd.OutOrStdout(), "ok %s (%d files)\n", man.OutputDir, len(man.Files))
 			}
-			return nil
+			return err
 		},
 	}
 	cmd.Flags().StringVar(&configPath, "config", "", "path to eletrocromo.json (default: ./eletrocromo.json if present)")
@@ -81,7 +81,6 @@ func resolveIconIO(cwd, configPath, iconFlag, outputFlag string) (source, output
 		return iconFlag, output, nil
 	}
 
-	baseDir := cwd
 	cfgPath := strings.TrimSpace(configPath)
 	if cfgPath == "" {
 		try := filepath.Join(cwd, apkgen.ConfigFileName)
@@ -90,11 +89,10 @@ func resolveIconIO(cwd, configPath, iconFlag, outputFlag string) (source, output
 		}
 	}
 	if cfgPath != "" {
-		cfg, dir, err := apkgen.LoadConfig(cfgPath)
+		cfg, baseDir, err := apkgen.LoadConfig(cfgPath)
 		if err != nil {
 			return "", "", err
 		}
-		baseDir = dir
 		if p := strings.TrimSpace(cfg.Icon); p != "" {
 			if !filepath.IsAbs(p) {
 				p = filepath.Join(baseDir, p)

@@ -57,9 +57,12 @@ Example:
 			}); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "created Android host project\n  package: %s\n  out:     %s\n", id, absOut)
-			fmt.Fprintf(cmd.OutOrStdout(), "next:\n  1. set go_main in eletrocromo.json if needed\n  2. cd %s && ./scripts/build-go.sh\n  3. gradle wrapper && ./gradlew assembleDebug\n", absOut)
-			return nil
+			outw := cmd.OutOrStdout()
+			if _, err := fmt.Fprintf(outw, "created Android host project\n  package: %s\n  out:     %s\n", id, absOut); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(outw, "next:\n  1. set go_main in eletrocromo.json if needed\n  2. cd %s && ./scripts/build-go.sh\n  3. gradle wrapper && ./gradlew assembleDebug\n", absOut)
+			return err
 		},
 	}
 
