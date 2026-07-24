@@ -64,3 +64,47 @@ func TestProfileDir_IsolatesByAppID(t *testing.T) {
 		t.Fatalf("profile dir missing: %v", err)
 	}
 }
+
+func TestUserDataDirFor_ByGOOS(t *testing.T) {
+	env := map[string]string{}
+	getenv := func(k string) string { return env[k] }
+
+	got := userDataDirFor("linux", "/home/u", getenv)
+	want := filepath.Join("/home/u", ".local", "share")
+	if got != want {
+		t.Fatalf("linux: got %q want %q", got, want)
+	}
+
+	// Even if a Linux home "looks" like macOS layout, GOOS wins (no Stat heuristic).
+	got = userDataDirFor("linux", "/home/u", getenv)
+	macish := filepath.Join("/home/u", "Library", "Application Support")
+	if got == macish {
+		t.Fatal("linux must not use Application Support")
+	}
+
+	got = userDataDirFor("darwin", "/Users/u", getenv)
+	want = filepath.Join("/Users/u", "Library", "Application Support")
+	if got != want {
+		t.Fatalf("darwin: got %q want %q", got, want)
+	}
+
+	env["LOCALAPPDATA"] = filepath.Join("C:", "Users", "u", "AppData", "Local")
+	got = userDataDirFor("windows", filepath.Join("C:", "Users", "u"), getenv)
+	if got != env["LOCALAPPDATA"] {
+		t.Fatalf("windows LOCALAPPDATA: got %q want %q", got, env["LOCALAPPDATA"])
+	}
+
+	delete(env, "LOCALAPPDATA")
+	got = userDataDirFor("windows", filepath.Join("C:", "Users", "u"), getenv)
+	want = filepath.Join("C:", "Users", "u", "AppData", "Local")
+	if got != want {
+		t.Fatalf("windows default: got %q want %q", got, want)
+	}
+
+	// Other Unix-like GOOS follows XDG-style default.
+	got = userDataDirFor("freebsd", "/home/u", getenv)
+	want = filepath.Join("/home/u", ".local", "share")
+	if got != want {
+		t.Fatalf("freebsd: got %q want %q", got, want)
+	}
+}
