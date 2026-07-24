@@ -4,7 +4,7 @@ go 1.25.6
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/lucasew/workspaced v0.0.0-20260722123058-736cf5ffa93a
+	github.com/lucasew/workspaced v0.0.0-20260723233637-c1bb47a443e8
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/image v0.44.0
 )
