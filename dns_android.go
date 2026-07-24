@@ -5,8 +5,6 @@ package eletrocromo
 import (
 	"context"
 	"net"
-	"os"
-	"strings"
 	"time"
 )
 
@@ -24,17 +22,14 @@ func configureDNSForPlatform() {
 			d := net.Dialer{Timeout: 3 * time.Second}
 			var last error
 			for _, s := range servers {
-				// Prefer udp4 to avoid IPv6 localhost stub issues.
-				c, err := d.DialContext(ctx, "udp4", s)
-				if err == nil {
-					return c, nil
+				// Prefer family-matched networks; see dnsDialNetworks.
+				for _, nw := range dnsDialNetworks(s) {
+					c, err := d.DialContext(ctx, nw, s)
+					if err == nil {
+						return c, nil
+					}
+					last = err
 				}
-				last = err
-				c, err = d.DialContext(ctx, "tcp4", s)
-				if err == nil {
-					return c, nil
-				}
-				last = err
 			}
 			if last != nil {
 				return nil, last
@@ -42,27 +37,4 @@ func configureDNSForPlatform() {
 			return d.DialContext(ctx, network, address)
 		},
 	}
-}
-
-func dnsServersFromEnv() []string {
-	raw := strings.TrimSpace(os.Getenv("ELETROCROMO_DNS"))
-	if raw == "" {
-		return nil
-	}
-	var out []string
-	for _, p := range strings.Split(raw, ",") {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		if !strings.Contains(p, ":") {
-			p = p + ":53"
-		}
-		// Skip Android stub resolvers that pure Go cannot use.
-		if strings.HasPrefix(p, "[::1]") || strings.HasPrefix(p, "127.0.0.1") || strings.HasPrefix(p, "::1") {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
 }
