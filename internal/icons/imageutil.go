@@ -32,11 +32,15 @@ func DecodeBytes(raw []byte, name string) (image.Image, error) {
 		// try jpeg explicitly if extension hints
 		ext := strings.ToLower(filepath.Ext(name))
 		if ext == ".jpg" || ext == ".jpeg" {
-			r.Seek(0, 0)
+			if _, seekErr := r.Seek(0, 0); seekErr != nil {
+				return nil, fmt.Errorf("decode %s: %w", name, seekErr)
+			}
 			return jpeg.Decode(r)
 		}
 		if ext == ".png" {
-			r.Seek(0, 0)
+			if _, seekErr := r.Seek(0, 0); seekErr != nil {
+				return nil, fmt.Errorf("decode %s: %w", name, seekErr)
+			}
 			return png.Decode(r)
 		}
 		return nil, fmt.Errorf("decode %s: %w (supported: png, jpeg)", name, err)
@@ -143,7 +147,7 @@ func EncodePNG(img image.Image) ([]byte, error) {
 }
 
 // WritePNG writes a PNG file, creating parent dirs.
-func WritePNG(path string, img image.Image) error {
+func WritePNG(path string, img image.Image) (err error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -151,7 +155,11 @@ func WritePNG(path string, img image.Image) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
 	return png.Encode(f, img)
 }
 
