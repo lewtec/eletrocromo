@@ -97,15 +97,17 @@ Example (from examples/counter):
 			// quieter: discard slog noise from taskgroup unless needed
 			ctx = logging.ContextWithLogger(ctx, slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), &slog.HandlerOptions{Level: slog.LevelWarn})))
 
-			g, ctx := taskgroup.New(ctx, taskgroup.DefaultLimits())
+			// taskgroup returns a child context; workers use the per-task ctx.
+			g, _ := taskgroup.New(ctx, taskgroup.DefaultLimits())
 			var iconRoot string
 
 			g.Go("icons", taskgroup.CPU, func(ctx context.Context, s *taskgroup.Status) error {
 				force := refresh
+				outw := cmd.OutOrStdout()
 				if !force && icons.Complete(iconOut) {
 					iconRoot = iconOut
-					fmt.Fprintf(cmd.OutOrStdout(), "eletrocromo: icons already present at %s\n", iconOut)
-					return nil
+					_, err := fmt.Fprintf(outw, "eletrocromo: icons already present at %s\n", iconOut)
+					return err
 				}
 				man, err := icons.Generate(icons.Options{
 					SourcePath: iconSrc,
@@ -116,8 +118,8 @@ Example (from examples/counter):
 					return err
 				}
 				iconRoot = man.OutputDir
-				fmt.Fprintf(cmd.OutOrStdout(), "eletrocromo: icons → %s\n", iconRoot)
-				return nil
+				_, err = fmt.Fprintf(outw, "eletrocromo: icons → %s\n", iconRoot)
+				return err
 			})
 
 			g.Go("android", taskgroup.IO, func(ctx context.Context, s *taskgroup.Status) error {
@@ -135,16 +137,21 @@ Example (from examples/counter):
 				if err != nil {
 					return err
 				}
+				outw := cmd.OutOrStdout()
 				if goOnly {
-					fmt.Fprintf(cmd.OutOrStdout(), "go libs:\n")
-					for _, p := range result.JNILibs {
-						fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", p)
+					if _, err := fmt.Fprintf(outw, "go libs:\n"); err != nil {
+						return err
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "work dir: %s\n", result.WorkDir)
-					return nil
+					for _, p := range result.JNILibs {
+						if _, err := fmt.Fprintf(outw, "  %s\n", p); err != nil {
+							return err
+						}
+					}
+					_, err = fmt.Fprintf(outw, "work dir: %s\n", result.WorkDir)
+					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "ok %s\n", result.APKPath)
-				return nil
+				_, err = fmt.Fprintf(outw, "ok %s\n", result.APKPath)
+				return err
 			}, "icons")
 
 			return g.Wait()

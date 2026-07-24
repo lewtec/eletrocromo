@@ -12,8 +12,9 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print build version (goreleaser -X / VCS / git)",
 		Args:  cobra.NoArgs,
-		Run: func(cmd *cobra.Command, _ []string) {
-			fmt.Fprintln(cmd.OutOrStdout(), version.Resolve().String())
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), version.Resolve().String())
+			return err
 		},
 	}
 }
