@@ -208,7 +208,8 @@ class MainActivity : AppCompatActivity() {
                 swipeRefresh.isRefreshing = false
                 val code = errorResponse?.statusCode ?: -1
                 val reason = errorResponse?.reasonPhrase ?: ""
-                val reqUrl = request.url?.toString().orEmpty()
+                // Never put the session query string on the splash (screenshots / bug reports).
+                val reqUrl = redactUrlForDisplay(request.url?.toString().orEmpty())
                 runOnUiThread {
                     showSplash(
                         getString(R.string.webview_http_error, code),
@@ -248,7 +249,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     showSplash(
                         getString(R.string.webview_error),
-                        detail = "code=$code\n$desc\n${request.url}",
+                        detail = "code=$code\n$desc\n${redactUrlForDisplay(request.url?.toString().orEmpty())}",
                         error = true,
                     )
                 }
@@ -256,6 +257,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         wv.loadUrl(url)
+    }
+
+    /** Strip query and fragment so splash errors never leak the session secret. */
+    private fun redactUrlForDisplay(raw: String): String {
+        if (raw.isBlank()) return raw
+        val noFrag = raw.substringBefore('#')
+        return noFrag.substringBefore('?')
     }
 
     override fun onDestroy() {
