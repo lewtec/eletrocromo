@@ -71,7 +71,9 @@ func TestGenerateFromPNG(t *testing.T) {
 	if err := png.Encode(f, img); err != nil {
 		t.Fatal(err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	out := filepath.Join(dir, "icons")
 	m, err := Generate(Options{SourcePath: src, OutputDir: out, Force: true})
