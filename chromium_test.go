@@ -17,6 +17,43 @@ import (
 
 const testAppID = "br.tec.lew.test"
 
+func TestRedactSecretsInText_StripsTokenQuery(t *testing.T) {
+	secret := "deadbeef-cafe-babe-0000-111122223333"
+	in := fmt.Sprintf(
+		`[1234:5678:ERROR:launch] failed --app=http://127.0.0.1:3847/?token=%s other=1`,
+		secret,
+	)
+	out := redactSecretsInText(in)
+	if strings.Contains(out, secret) {
+		t.Fatalf("token still present after redaction: %q", out)
+	}
+	if strings.Contains(out, "token=") {
+		t.Fatalf("token= still present after redaction: %q", out)
+	}
+	if !strings.Contains(out, "http://127.0.0.1:3847/") {
+		t.Fatalf("expected base URL kept, got %q", out)
+	}
+}
+
+func TestWrapHeliumExit_RedactsTokenFromStderr(t *testing.T) {
+	secret := "session-secret-do-not-leak"
+	stderr := "Chromium: --app=http://127.0.0.1:9/?token=" + secret + " crashed"
+	err := wrapHeliumExit(fmt.Errorf("exit status 1"), stderr)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, secret) {
+		t.Fatalf("token leaked into error: %q", msg)
+	}
+	if strings.Contains(msg, "token=") {
+		t.Fatalf("token= leaked into error: %q", msg)
+	}
+	if !errors.Is(err, ErrHeliumLaunch) {
+		t.Fatalf("want ErrHeliumLaunch, got %v", err)
+	}
+}
+
 func TestLaunchChromium_RejectsNonHTTPSchemes(t *testing.T) {
 	cases := []string{
 		"file:///etc/passwd",
