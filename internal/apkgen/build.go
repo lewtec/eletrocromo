@@ -83,7 +83,9 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	if opts.Config.VersionCode <= 0 {
 		cfg.VersionCode = version.AndroidCodeFrom(vi.Version, version.GitCommitCount(goMain))
 	}
-	fmt.Fprintf(stdout, "eletrocromo: version %s (code %d)\n", cfg.VersionName, cfg.VersionCode)
+	if _, err := fmt.Fprintf(stdout, "eletrocromo: version %s (code %d)\n", cfg.VersionName, cfg.VersionCode); err != nil {
+		return nil, err
+	}
 
 	workDir, ephemeral, err := resolveWorkDir(opts)
 	if err != nil {
@@ -102,7 +104,10 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	genCfg := cfg
 	genCfg.GoMain = goMain
 
-	fmt.Fprintf(stdout, "eletrocromo: generating Android host in %s\n", workDir)
+	if _, err := fmt.Fprintf(stdout, "eletrocromo: generating Android host in %s\n", workDir); err != nil {
+		buildErr = err
+		return nil, buildErr
+	}
 	if err := Create(Options{
 		OutDir: workDir,
 		Force:  true, // work dir is ours or full rebuild
@@ -123,13 +128,19 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		iconRoot = tmpIcons
 	}
 	resDir := filepath.Join(workDir, "app", "src", "main", "res")
-	fmt.Fprintf(stdout, "eletrocromo: applying launcher icons from %s\n", iconRoot)
+	if _, err := fmt.Fprintf(stdout, "eletrocromo: applying launcher icons from %s\n", iconRoot); err != nil {
+		buildErr = err
+		return nil, buildErr
+	}
 	if err := applyIconMipmaps(iconRoot, resDir); err != nil {
 		buildErr = err
 		return nil, buildErr
 	}
 
-	fmt.Fprintf(stdout, "eletrocromo: building Go binary for %v\n", genCfg.abis())
+	if _, err := fmt.Fprintf(stdout, "eletrocromo: building Go binary for %v\n", genCfg.abis()); err != nil {
+		buildErr = err
+		return nil, buildErr
+	}
 	libs, err := BuildGoLibs(workDir, goMain, genCfg.abis(), vi, stdout, stderr)
 	if err != nil {
 		buildErr = err
@@ -138,8 +149,8 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 
 	result := &BuildResult{WorkDir: workDir, JNILibs: libs}
 	if opts.GoOnly {
-		fmt.Fprintf(stdout, "eletrocromo: --go-only: skipped Gradle (jniLibs ready under %s)\n", workDir)
-		return result, nil
+		_, err := fmt.Fprintf(stdout, "eletrocromo: --go-only: skipped Gradle (jniLibs ready under %s)\n", workDir)
+		return result, err
 	}
 
 	outAPK := strings.TrimSpace(opts.OutAPK)
@@ -153,7 +164,10 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, buildErr
 	}
 
-	fmt.Fprintf(stdout, "eletrocromo: assembling debug APK…\n")
+	if _, err := fmt.Fprintf(stdout, "eletrocromo: assembling debug APK…\n"); err != nil {
+		buildErr = err
+		return nil, buildErr
+	}
 	apk, err := AssembleDebug(workDir, stdout, stderr)
 	if err != nil {
 		buildErr = err
@@ -168,8 +182,8 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, buildErr
 	}
 	result.APKPath = outAPK
-	fmt.Fprintf(stdout, "eletrocromo: APK → %s\n", outAPK)
-	return result, nil
+	_, err = fmt.Fprintf(stdout, "eletrocromo: APK → %s\n", outAPK)
+	return result, err
 }
 
 func resolveWorkDir(opts BuildOptions) (workDir string, cleanup bool, err error) {
@@ -208,7 +222,9 @@ func BuildGoLibs(workDir, goMainDir string, abis []string, stamp version.Info, s
 			return nil, err
 		}
 		dest := filepath.Join(destDir, "libeletrocromo.so")
-		fmt.Fprintf(stdout, "  → %s (GOARCH=%s)\n", abi, goarch)
+		if _, err := fmt.Fprintf(stdout, "  → %s (GOARCH=%s)\n", abi, goarch); err != nil {
+			return nil, err
+		}
 		cmd := exec.Command("go", "build", "-trimpath", "-ldflags", ldflags, "-o", dest, ".")
 		cmd.Dir = goMainDir
 		cmd.Env = append(os.Environ(),
@@ -303,7 +319,7 @@ func androidSDK() (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("Android SDK not found: set ANDROID_HOME (or ANDROID_SDK_ROOT) to the SDK root")
+	return "", fmt.Errorf("android SDK not found: set ANDROID_HOME (or ANDROID_SDK_ROOT) to the SDK root")
 }
 
 func writeLocalProperties(workDir, sdk string) error {
@@ -331,16 +347,17 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
+	_, copyErr := io.Copy(out, in)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return copyErr
 	}
-	return out.Close()
+	return closeErr
 }
 
 // DefaultOutAPK suggests dist/<last-label>-debug.apk under cwd.
