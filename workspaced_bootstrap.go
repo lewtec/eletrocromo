@@ -138,27 +138,35 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("bootstrap workspaced: download: %w", err)
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
 		return "", fmt.Errorf("bootstrap workspaced: download %s: HTTP %s", url, resp.Status)
 	}
 
 	archivePath := filepath.Join(dir, asset)
 	f, err := os.OpenFile(archivePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
+		_ = resp.Body.Close()
 		return "", err
 	}
 	h := sha256.New()
 	w := io.MultiWriter(f, h)
+	// body.Close closes the HTTP response body (idleTimeoutReader wraps it).
 	body := newIdleTimeoutReader(resp.Body, downloadIdleTimeout)
-	if _, err := io.Copy(w, body); err != nil {
-		f.Close()
-		_ = body.Close()
-		return "", fmt.Errorf("bootstrap workspaced: write archive: %w", err)
+	_, copyErr := io.Copy(w, body)
+	bodyCloseErr := body.Close()
+	fileCloseErr := f.Close()
+	if copyErr != nil {
+		_ = os.Remove(archivePath)
+		return "", fmt.Errorf("bootstrap workspaced: write archive: %w", copyErr)
 	}
-	_ = body.Close()
-	if err := f.Close(); err != nil {
-		return "", err
+	if bodyCloseErr != nil {
+		_ = os.Remove(archivePath)
+		return "", fmt.Errorf("bootstrap workspaced: close body: %w", bodyCloseErr)
+	}
+	if fileCloseErr != nil {
+		_ = os.Remove(archivePath)
+		return "", fileCloseErr
 	}
 	got := hex.EncodeToString(h.Sum(nil))
 	if got != wantSum {
@@ -167,9 +175,11 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 	}
 
 	if err := extractWorkspacedBinary(archivePath, binPath, binName); err != nil {
+		_ = os.Remove(binPath)
 		return "", fmt.Errorf("bootstrap workspaced: extract: %w", err)
 	}
 	if err := os.Chmod(binPath, 0o755); err != nil {
+		_ = os.Remove(binPath)
 		return "", err
 	}
 	return binPath, nil
@@ -182,25 +192,33 @@ func extractWorkspacedBinary(archivePath, destPath, binName string) error {
 	return extractTarGzBinary(archivePath, destPath, binName)
 }
 
-func extractTarGzBinary(archivePath, destPath, binName string) error {
-	f, err := os.Open(archivePath)
-	if err != nil {
-		return err
+func extractTarGzBinary(archivePath, destPath, binName string) (err error) {
+	f, openErr := os.Open(archivePath)
+	if openErr != nil {
+		return openErr
 	}
-	defer f.Close()
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return err
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	gz, gzErr := gzip.NewReader(f)
+	if gzErr != nil {
+		return gzErr
 	}
-	defer gz.Close()
+	defer func() {
+		if cerr := gz.Close(); err == nil {
+			err = cerr
+		}
+	}()
 	tr := tar.NewReader(gz)
 	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
+		hdr, nextErr := tr.Next()
+		if nextErr == io.EOF {
 			break
 		}
-		if err != nil {
-			return err
+		if nextErr != nil {
+			return nextErr
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			continue
@@ -209,46 +227,65 @@ func extractTarGzBinary(archivePath, destPath, binName string) error {
 		if base != binName && base != "workspaced" {
 			continue
 		}
-		out, err := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
-		if err != nil {
-			return err
+		out, outErr := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+		if outErr != nil {
+			return outErr
 		}
-		if _, err := io.Copy(out, tr); err != nil {
-			out.Close()
-			return err
+		_, copyErr := io.Copy(out, tr)
+		closeErr := out.Close()
+		if copyErr != nil {
+			_ = os.Remove(destPath)
+			return copyErr
 		}
-		return out.Close()
+		if closeErr != nil {
+			_ = os.Remove(destPath)
+			return closeErr
+		}
+		return nil
 	}
 	return fmt.Errorf("binary %q not found in archive", binName)
 }
 
-func extractZipBinary(archivePath, destPath, binName string) error {
-	r, err := zip.OpenReader(archivePath)
-	if err != nil {
-		return err
+func extractZipBinary(archivePath, destPath, binName string) (err error) {
+	r, openErr := zip.OpenReader(archivePath)
+	if openErr != nil {
+		return openErr
 	}
-	defer r.Close()
+	defer func() {
+		if cerr := r.Close(); err == nil {
+			err = cerr
+		}
+	}()
 	for _, zf := range r.File {
 		base := filepath.Base(zf.Name)
 		if base != binName && base != "workspaced" && base != "workspaced.exe" {
 			continue
 		}
-		rc, err := zf.Open()
-		if err != nil {
-			return err
+		rc, rcErr := zf.Open()
+		if rcErr != nil {
+			return rcErr
 		}
-		out, err := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
-		if err != nil {
-			rc.Close()
-			return err
+		out, outErr := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+		if outErr != nil {
+			_ = rc.Close()
+			return outErr
 		}
 		_, copyErr := io.Copy(out, rc)
-		rc.Close()
+		rcCloseErr := rc.Close()
 		closeErr := out.Close()
 		if copyErr != nil {
+			_ = os.Remove(destPath)
 			return copyErr
 		}
-		return closeErr
+		if rcCloseErr != nil {
+			_ = os.Remove(destPath)
+			return rcCloseErr
+		}
+		if closeErr != nil {
+			_ = os.Remove(destPath)
+			return closeErr
+		}
+		return nil
 	}
 	return fmt.Errorf("binary %q not found in archive", binName)
 }
