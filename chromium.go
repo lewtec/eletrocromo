@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -173,8 +174,38 @@ func (w *appWindow) stderrSnapshot() string {
 	return w.stderr.String()
 }
 
+// redactSecretsInText strips URL query/fragment and bare token= values so
+// Helium/Chromium diagnostics never re-emit the session secret into Run errors
+// (stderr often echoes --app=http://…/?token=…).
+func redactSecretsInText(s string) string {
+	if s == "" {
+		return s
+	}
+	// Full/partial URLs with query or fragment (http(s) and scheme-relative).
+	s = urlWithQueryOrFragment.ReplaceAllStringFunc(s, func(raw string) string {
+		u, err := url.Parse(raw)
+		if err != nil {
+			return stripTokenKV(raw)
+		}
+		u.RawQuery = ""
+		u.Fragment = ""
+		return u.String()
+	})
+	return stripTokenKV(s)
+}
+
+// urlWithQueryOrFragment matches http(s) URLs that include ? or # (session handshake).
+var urlWithQueryOrFragment = regexp.MustCompile(`https?://[^\s"'<>]+[?#][^\s"'<>]*`)
+
+// tokenKV matches token=… query fragments left after partial URL scrubbing.
+var tokenKV = regexp.MustCompile(`(?i)(?:\?|&)?token=[^\s&"'<>]*`)
+
+func stripTokenKV(s string) string {
+	return tokenKV.ReplaceAllString(s, "")
+}
+
 func wrapHeliumExit(err error, stderr string) error {
-	msg := strings.TrimSpace(stderr)
+	msg := strings.TrimSpace(redactSecretsInText(stderr))
 	if len(msg) > 512 {
 		msg = "…" + msg[len(msg)-512:]
 	}
