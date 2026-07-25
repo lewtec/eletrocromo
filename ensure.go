@@ -3,6 +3,7 @@ package eletrocromo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,6 +22,12 @@ func workspacedPathOverride() string {
 }
 
 // commandOutput runs name with args and returns stdout. Tests may override.
+// On failure the returned error wraps the underlying Run error (via %w) so
+// callers can use errors.As for *exec.ExitError. When the context is already
+// done (cancel/deadline), that error is joined in as well: CommandContext often
+// surfaces a killed child as "signal: killed" rather than ctx.Err(), which used
+// to make errors.Is(err, context.Canceled) fail for ResolveBrowserHost/App.Run.
+// Stderr text is included when present.
 var commandOutput = func(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	var stdout, stderr bytes.Buffer
@@ -28,11 +35,14 @@ var commandOutput = func(ctx context.Context, name string, args ...string) ([]by
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			err = errors.Join(err, ctxErr)
+		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
-			msg = err.Error()
+			return stdout.Bytes(), fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
 		}
-		return stdout.Bytes(), fmt.Errorf("%s %s: %s", name, strings.Join(args, " "), msg)
+		return stdout.Bytes(), fmt.Errorf("%s %s: %s: %w", name, strings.Join(args, " "), msg, err)
 	}
 	return stdout.Bytes(), nil
 }
