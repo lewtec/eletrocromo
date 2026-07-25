@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -56,15 +57,23 @@ func userDataDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if os.PathSeparator == '\\' {
-		if v := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); v != "" {
-			return v, nil
+	return userDataDirFor(runtime.GOOS, home, os.Getenv), nil
+}
+
+// userDataDirFor picks the OS data directory when XDG_DATA_HOME is unset.
+// Uses runtime GOOS (not path heuristics) so a Linux home that happens to
+// contain Library/Application Support is not misclassified as macOS.
+func userDataDirFor(goos, home string, getenv func(string) string) string {
+	switch goos {
+	case "windows":
+		if v := strings.TrimSpace(getenv("LOCALAPPDATA")); v != "" {
+			return v
 		}
-		return filepath.Join(home, "AppData", "Local"), nil
+		return filepath.Join(home, "AppData", "Local")
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support")
+	default:
+		// Linux and other Unix: XDG base dir when XDG_DATA_HOME is unset.
+		return filepath.Join(home, ".local", "share")
 	}
-	// macOS
-	if st, err := os.Stat(filepath.Join(home, "Library", "Application Support")); err == nil && st.IsDir() {
-		return filepath.Join(home, "Library", "Application Support"), nil
-	}
-	return filepath.Join(home, ".local", "share"), nil
 }
