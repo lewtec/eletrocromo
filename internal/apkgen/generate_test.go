@@ -87,6 +87,31 @@ func TestCreate_PackageIDLayout(t *testing.T) {
 	}
 }
 
+func TestCreate_ServerServiceRedactsTokenInLogs(t *testing.T) {
+	out := t.TempDir()
+	if err := Create(Options{
+		OutDir: out,
+		Config: Config{PackageID: "br.tec.lew.counter", AppName: "Counter"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := os.ReadFile(filepath.Join(out, "app/src/main/java/br/tec/lew/counter/ServerService.kt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(svc)
+	// Must not log the authenticated READY URL raw to logcat.
+	if strings.Contains(s, "ready url=$loopbackUrl") {
+		t.Fatal("ServerService still logs raw loopbackUrl (token in query)")
+	}
+	if !strings.Contains(s, "redactUrlForLog") || !strings.Contains(s, "redactForLog") {
+		t.Fatal("expected log redaction helpers in ServerService")
+	}
+	if !strings.Contains(s, "redactForLog(text)") {
+		t.Fatal("stdout drain should pass lines through redactForLog")
+	}
+}
+
 func TestCreate_RejectsBadID(t *testing.T) {
 	err := Create(Options{
 		OutDir: t.TempDir(),

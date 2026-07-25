@@ -112,7 +112,8 @@ class ServerService : Service() {
                     var line: String?
                     while (reader.readLine().also { line = it } != null) {
                         val text = line ?: continue
-                        Log.i(TAG, "go: $text")
+                        // Never log auth tokens: READY lines carry ?token= for WebView handoff.
+                        Log.i(TAG, "go: ${redactForLog(text)}")
                         if (stdoutUrl == null) {
                             extractReadyUrl(text)?.let { stdoutUrl = it }
                         }
@@ -134,7 +135,8 @@ class ServerService : Service() {
             }
 
             val loopbackUrl = forceLoopbackUrl(parsedUrl)
-            Log.i(TAG, "ready url=$loopbackUrl")
+            // Base URL only — query holds the session token (same rule as Go startup logs).
+            Log.i(TAG, "ready url=${redactUrlForLog(loopbackUrl)}")
             listener?.onStatus(getString(R.string.status_connecting))
 
             // Probe is best-effort. VPN/system proxies have black-holed Java
@@ -206,6 +208,38 @@ class ServerService : Service() {
         }
         val token = rest.split(Regex("\\s+")).firstOrNull().orEmpty()
         return token.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+    }
+
+    /** Strip query/fragment so logcat never records the auth token. */
+    private fun redactUrlForLog(raw: String): String {
+        return try {
+            val u = URI(raw)
+            val port = if (u.port > 0) ":${u.port}" else ""
+            val path = u.rawPath.orEmpty().ifEmpty { "/" }
+            "${u.scheme}://${u.host}$port$path"
+        } catch (_: Exception) {
+            raw.substringBefore('?').substringBefore('#')
+        }
+    }
+
+    /** Redact READY URLs and bare ?token= fragments in arbitrary Go log lines. */
+    private fun redactForLog(text: String): String {
+        val idx = text.indexOf(READY_PREFIX)
+        if (idx >= 0) {
+            val head = text.substring(0, idx + READY_PREFIX.length)
+            val rest = text.substring(idx + READY_PREFIX.length).trim()
+            val url = rest.split(Regex("\\s+")).firstOrNull().orEmpty()
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                val tail = rest.removePrefix(url).trimStart()
+                return if (tail.isEmpty()) {
+                    head + redactUrlForLog(url)
+                } else {
+                    head + redactUrlForLog(url) + " " + tail
+                }
+            }
+        }
+        // Defensive: any remaining token query param in the line.
+        return TOKEN_QUERY.matcher(text).replaceAll("$1token=***")
     }
 
     /**
@@ -365,5 +399,7 @@ class ServerService : Service() {
         private const val READY_WAIT_ATTEMPTS = 200 // ~10s at 50ms
         private val URL_IN_LINE: Pattern =
             Pattern.compile("https?://[^\\s\"'<>]+")
+        private val TOKEN_QUERY: Pattern =
+            Pattern.compile("(?i)([?&])token=[^&\\s\"'<>]*")
     }
 }
