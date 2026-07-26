@@ -16,6 +16,10 @@ const (
 	heliumBrowserBin  = "helium"
 )
 
+// ErrEnsureHeliumEmptyPath is returned when workspaced tool which succeeds but
+// prints no binary path (callers can use errors.Is).
+var ErrEnsureHeliumEmptyPath = errors.New("workspaced tool which returned empty path")
+
 // workspacedPathOverride is set by ELETROCROMO_WORKSPACED when non-empty.
 func workspacedPathOverride() string {
 	return strings.TrimSpace(os.Getenv("ELETROCROMO_WORKSPACED"))
@@ -69,7 +73,7 @@ func ensureHeliumBrowser(ctx context.Context) (string, error) {
 		}
 	}
 	if path == "" {
-		return "", fmt.Errorf("workspaced tool which %s %s: empty path", heliumBrowserTool, heliumBrowserBin)
+		return "", fmt.Errorf("%w: %s %s", ErrEnsureHeliumEmptyPath, heliumBrowserTool, heliumBrowserBin)
 	}
 	return path, nil
 }
