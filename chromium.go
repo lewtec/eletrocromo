@@ -26,6 +26,12 @@ var ErrNoChromium = errors.New("no Helium browser host found")
 // ErrHeliumLaunch is returned when the Helium process fails to stay up after Start.
 var ErrHeliumLaunch = errors.New("helium failed to launch")
 
+// ErrInvalidURLScheme is returned when the app URL is not http(s).
+var ErrInvalidURLScheme = errors.New("invalid URL scheme")
+
+// ErrUserDataDirRequired is returned when startAppWindow has no profile directory.
+var ErrUserDataDirRequired = errors.New("user data dir is required")
+
 // heliumStartupGrace is how long we wait for the process to prove it stays up.
 // Immediate crash (bad flags, missing libs, wrapper exit) surfaces as Run error.
 var heliumStartupGrace = 2 * time.Second
@@ -95,10 +101,10 @@ func startAppWindow(bin, rawURL, userDataDir string) (*appWindow, error) {
 		return nil, err
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("invalid URL scheme: %s", u.Scheme)
+		return nil, fmt.Errorf("%w: %s", ErrInvalidURLScheme, u.Scheme)
 	}
 	if userDataDir == "" {
-		return nil, fmt.Errorf("user data dir is required")
+		return nil, ErrUserDataDirRequired
 	}
 	w := &appWindow{waitc: make(chan error, 1)}
 	// Chromium-family app window + dedicated profile so apps do not share
@@ -226,7 +232,7 @@ func wrapHeliumExit(err error, stderr string) error {
 // ProfileDir(appID). Prefer App.Run for the full lifecycle.
 func LaunchChromium(ctx context.Context, u *url.URL, appID string) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("invalid URL scheme: %s", u.Scheme)
+		return fmt.Errorf("%w: %s", ErrInvalidURLScheme, u.Scheme)
 	}
 	profileDir, err := ProfileDir(appID)
 	if err != nil {
