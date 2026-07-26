@@ -3,11 +3,15 @@ package icons
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"image"
 	"os"
 	"path/filepath"
 )
+
+// ErrICONoSizes is returned when WriteICO is given no positive sizes.
+var ErrICONoSizes = errors.New("ico: no sizes")
 
 // WriteICO writes a multi-size ICO (PNG-compressed entries) to path.
 func WriteICO(path string, square image.Image, sizes []int) error {
@@ -31,7 +35,7 @@ func WriteICO(path string, square image.Image, sizes []int) error {
 		entries = append(entries, entry{size: s, png: pngb})
 	}
 	if len(entries) == 0 {
-		return fmt.Errorf("ico: no sizes")
+		return ErrICONoSizes
 	}
 
 	var buf bytes.Buffer
