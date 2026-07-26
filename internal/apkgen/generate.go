@@ -18,6 +18,7 @@ import (
 
 	"github.com/lewtec/eletrocromo"
 	"github.com/lewtec/eletrocromo/internal/version"
+	"errors"
 )
 
 //go:embed all:template
@@ -123,7 +124,7 @@ func normalizeConfig(cfg Config) (Config, error) {
 func prepareOutDir(out string, force bool) error {
 	st, err := os.Stat(out)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return os.MkdirAll(out, 0o755)
 		}
 		return err

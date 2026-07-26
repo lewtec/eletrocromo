@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"errors"
+	"io/fs"
 )
 
 func TestCreate_PackageIDLayout(t *testing.T) {
@@ -116,7 +118,7 @@ func TestCreate_RequiresForceWhenNonEmpty(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(out, "keep")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(out, "keep")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("force should wipe old files, keep still there: %v", err)
 	}
 }

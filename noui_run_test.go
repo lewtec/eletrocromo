@@ -12,7 +12,7 @@ import (
 )
 
 func TestRun_NoUI_PrintsReadyAndServes(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	var buf bytes.Buffer

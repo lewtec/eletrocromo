@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"errors"
+	"io/fs"
 )
 
 func writeTarGz(t *testing.T, path, entryName string, payload []byte) {
@@ -109,7 +111,7 @@ func TestExtractTarGzBinary_MissingEntry(t *testing.T) {
 	if err := extractTarGzBinary(archive, dest, "workspaced"); err == nil {
 		t.Fatal("expected error for missing binary entry")
 	}
-	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+	if _, err := os.Stat(dest); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("dest should not exist, stat err=%v", err)
 	}
 }
@@ -130,7 +132,7 @@ func TestExtractWorkspacedBinary_MissingEntryLeavesNoDest(t *testing.T) {
 	// extract itself does not open dest when the entry is missing, so the
 	// caller (bootstrapWorkspaced) must remove the path on extract failure.
 	_ = os.Remove(dest)
-	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+	if _, err := os.Stat(dest); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("partial binary should be removed after extract failure, err=%v", err)
 	}
 }
