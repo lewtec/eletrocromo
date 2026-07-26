@@ -1,6 +1,7 @@
 package apkgen
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,16 @@ import (
 
 	"github.com/lewtec/eletrocromo/internal/icons"
 	"github.com/lewtec/eletrocromo/internal/version"
+)
+
+// Sentinel errors for static build/setup failures (errors.Is / wrap with %w).
+var (
+	ErrOutAPKRequired     = errors.New("out apk path is required (or use --go-only)")
+	ErrUnsupportedABI     = errors.New("unsupported abi")
+	ErrDebugAPKMissing    = errors.New("gradle succeeded but no debug APK under app/build/outputs/apk/debug")
+	ErrSDKEnvNotDir       = errors.New("android SDK env path is not a directory")
+	ErrAndroidSDKNotFound = errors.New("android SDK not found: set ANDROID_HOME (or ANDROID_SDK_ROOT) to the SDK root")
+	ErrGradleNotFound     = errors.New("neither ./gradlew nor gradle on PATH; install Gradle 8.9+ (or Android Studio) and JDK 17")
 )
 
 func applyIconMipmaps(iconRoot, androidResDir string) error {
@@ -155,7 +166,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 
 	outAPK := strings.TrimSpace(opts.OutAPK)
 	if outAPK == "" {
-		buildErr = fmt.Errorf("out apk path is required (or use --go-only)")
+		buildErr = ErrOutAPKRequired
 		return nil, buildErr
 	}
 	outAPK, err = filepath.Abs(outAPK)
@@ -215,7 +226,7 @@ func BuildGoLibs(workDir, goMainDir string, abis []string, stamp version.Info, s
 	for _, abi := range abis {
 		goarch, ok := abiToGOARCH[abi]
 		if !ok {
-			return nil, fmt.Errorf("unsupported abi %q", abi)
+			return nil, fmt.Errorf("%w: %q", ErrUnsupportedABI, abi)
 		}
 		destDir := filepath.Join(workDir, "app", "src", "main", "jniLibs", abi)
 		if err := os.MkdirAll(destDir, 0o755); err != nil {
@@ -286,7 +297,7 @@ func AssembleDebug(workDir string, stdout, stderr io.Writer) (string, error) {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("gradle succeeded but no debug APK under app/build/outputs/apk/debug (work dir %s)", workDir)
+	return "", fmt.Errorf("%w (work dir %s)", ErrDebugAPKMissing, workDir)
 }
 
 func requireJDK() error {
@@ -302,7 +313,7 @@ func androidSDK() (string, error) {
 			if st, err := os.Stat(v); err == nil && st.IsDir() {
 				return v, nil
 			}
-			return "", fmt.Errorf("%s=%q is not a directory", key, v)
+			return "", fmt.Errorf("%w: %s=%q", ErrSDKEnvNotDir, key, v)
 		}
 	}
 	// Common user installs.
@@ -319,7 +330,7 @@ func androidSDK() (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("android SDK not found: set ANDROID_HOME (or ANDROID_SDK_ROOT) to the SDK root")
+	return "", ErrAndroidSDKNotFound
 }
 
 func writeLocalProperties(workDir, sdk string) error {
@@ -339,7 +350,7 @@ func resolveGradle(workDir string) ([]string, error) {
 		// Prefer system gradle directly (no wrapper jar in template).
 		return []string{g}, nil
 	}
-	return nil, fmt.Errorf("neither ./gradlew nor gradle on PATH; install Gradle 8.9+ (or Android Studio) and JDK 17")
+	return nil, ErrGradleNotFound
 }
 
 func copyFile(src, dst string) error {
