@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -23,6 +24,16 @@ import (
 const (
 	workspacedBootstrapVersion = "0.12.0"
 	workspacedReleaseBase      = "https://github.com/lucasew/workspaced/releases/download/" + workspacedBootstrapVersion
+)
+
+// Sentinel errors for static workspaced bootstrap failure modes (errors.Is).
+var (
+	ErrBootstrapUnsupportedGOOS   = errors.New("bootstrap workspaced: unsupported GOOS")
+	ErrBootstrapUnsupportedGOARCH = errors.New("bootstrap workspaced: unsupported GOARCH")
+	ErrBootstrapNoPinnedChecksum  = errors.New("bootstrap workspaced: no pinned checksum")
+	ErrBootstrapDownloadHTTP      = errors.New("bootstrap workspaced: download HTTP error")
+	ErrBootstrapChecksumMismatch  = errors.New("bootstrap workspaced: checksum mismatch")
+	ErrBootstrapBinaryMissing     = errors.New("binary not found in archive")
 )
 
 // SHA-256 digests for workspaced 0.12.0 release archives (from checksums.txt).
@@ -75,7 +86,7 @@ func workspacedAssetName() (string, error) {
 	case "windows":
 		osPart = "Windows"
 	default:
-		return "", fmt.Errorf("bootstrap workspaced: unsupported GOOS %s", runtime.GOOS)
+		return "", fmt.Errorf("%w: %s", ErrBootstrapUnsupportedGOOS, runtime.GOOS)
 	}
 	var archPart string
 	switch runtime.GOARCH {
@@ -86,7 +97,7 @@ func workspacedAssetName() (string, error) {
 	case "386":
 		archPart = "i386"
 	default:
-		return "", fmt.Errorf("bootstrap workspaced: unsupported GOARCH %s", runtime.GOARCH)
+		return "", fmt.Errorf("%w: %s", ErrBootstrapUnsupportedGOARCH, runtime.GOARCH)
 	}
 	ext := ".tar.gz"
 	if runtime.GOOS == "windows" {
@@ -113,7 +124,7 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 	}
 	wantSum, ok := workspacedAssetSHA256[asset]
 	if !ok {
-		return "", fmt.Errorf("bootstrap workspaced: no pinned checksum for %s", asset)
+		return "", fmt.Errorf("%w: %s", ErrBootstrapNoPinnedChecksum, asset)
 	}
 
 	dir, err := workspacedCacheDir()
@@ -140,7 +151,7 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
-		return "", fmt.Errorf("bootstrap workspaced: download %s: HTTP %s", url, resp.Status)
+		return "", fmt.Errorf("%w: %s: HTTP %s", ErrBootstrapDownloadHTTP, url, resp.Status)
 	}
 
 	archivePath := filepath.Join(dir, asset)
@@ -171,7 +182,7 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 	got := hex.EncodeToString(h.Sum(nil))
 	if got != wantSum {
 		_ = os.Remove(archivePath)
-		return "", fmt.Errorf("bootstrap workspaced: checksum mismatch for %s: got %s want %s", asset, got, wantSum)
+		return "", fmt.Errorf("%w: %s: got %s want %s", ErrBootstrapChecksumMismatch, asset, got, wantSum)
 	}
 
 	if err := extractWorkspacedBinary(archivePath, binPath, binName); err != nil {
@@ -243,7 +254,7 @@ func extractTarGzBinary(archivePath, destPath, binName string) (err error) {
 		}
 		return nil
 	}
-	return fmt.Errorf("binary %q not found in archive", binName)
+	return fmt.Errorf("%w: %q", ErrBootstrapBinaryMissing, binName)
 }
 
 func extractZipBinary(archivePath, destPath, binName string) (err error) {
@@ -287,5 +298,5 @@ func extractZipBinary(archivePath, destPath, binName string) (err error) {
 		}
 		return nil
 	}
-	return fmt.Errorf("binary %q not found in archive", binName)
+	return fmt.Errorf("%w: %q", ErrBootstrapBinaryMissing, binName)
 }
