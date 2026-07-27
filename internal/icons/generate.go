@@ -3,6 +3,7 @@ package icons
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -11,6 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+)
+
+// Sentinel errors for static validation failures (errors.Is / wrap with %w).
+var (
+	// ErrSVGMasterNotSupported is returned when SourcePath is an SVG (not rasterized in-process).
+	ErrSVGMasterNotSupported = errors.New("svg masters are not rasterized in-process yet; pass a PNG/JPEG, or convert first (tool catalog TBD)")
+	// ErrAndroidIconsMissing is returned when ApplyAndroidRes finds no android/ tree under iconRoot.
+	ErrAndroidIconsMissing = errors.New("android icons missing (run build icons)")
 )
 
 // Options drives Generate.
@@ -64,7 +73,7 @@ func Generate(opts Options) (*Manifest, error) {
 		}
 		ext := strings.ToLower(filepath.Ext(p))
 		if ext == ".svg" {
-			return nil, fmt.Errorf("svg masters are not rasterized in-process yet; pass a PNG/JPEG, or convert first (tool catalog TBD)")
+			return nil, ErrSVGMasterNotSupported
 		}
 	} else {
 		img, err = DecodeBytes(DefaultMarkPNG, "default/mark.png")
@@ -174,7 +183,7 @@ func Complete(dir string) bool {
 func ApplyAndroidRes(iconRoot, androidResDir string) error {
 	srcRoot := filepath.Join(iconRoot, "android")
 	if st, err := os.Stat(srcRoot); err != nil || !st.IsDir() {
-		return fmt.Errorf("android icons missing under %s (run build icons)", iconRoot)
+		return fmt.Errorf("%w: under %s", ErrAndroidIconsMissing, iconRoot)
 	}
 	for _, m := range AndroidMipmaps {
 		src := filepath.Join(srcRoot, m.Dir, "ic_launcher.png")
