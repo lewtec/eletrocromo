@@ -365,10 +365,8 @@ func copyFile(src, dst string) error {
 	}
 	_, copyErr := io.Copy(out, in)
 	closeErr := out.Close()
-	if copyErr != nil {
-		return copyErr
-	}
-	return closeErr
+	// Join so a close failure is not dropped when Copy already failed.
+	return errors.Join(copyErr, closeErr)
 }
 
 // DefaultOutAPK suggests dist/<last-label>-debug.apk under cwd.

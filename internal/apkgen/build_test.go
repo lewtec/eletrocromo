@@ -103,3 +103,26 @@ func TestAndroidSDK_MissingMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCopyFile(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.bin")
+	dst := filepath.Join(dir, "dst.bin")
+	want := []byte("apk-bytes")
+	if err := os.WriteFile(src, want, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	if err := copyFile(filepath.Join(dir, "missing"), dst); err == nil {
+		t.Fatal("expected error for missing src")
+	}
+}
