@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,6 +15,10 @@ import (
 	"github.com/lucasew/workspaced/pkg/taskgroup"
 	"github.com/spf13/cobra"
 )
+
+// ErrMissingPackageID is returned when build android has no package_id (config or --id).
+// Callers can use errors.Is.
+var ErrMissingPackageID = errors.New("package id required")
 
 func newBuildAndroidCmd() *cobra.Command {
 	var (
@@ -66,7 +71,7 @@ Example (from examples/counter):
 				return err
 			}
 			if strings.TrimSpace(cfg.PackageID) == "" {
-				return fmt.Errorf("package id required: set package_id in %s or pass --id", apkgen.ConfigFileName)
+				return fmt.Errorf("%w: set package_id in %s or pass --id", ErrMissingPackageID, apkgen.ConfigFileName)
 			}
 
 			// Resolve icon source: flag > config
