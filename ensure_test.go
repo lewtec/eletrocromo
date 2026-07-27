@@ -80,7 +80,7 @@ func TestCommandOutput_IncludesStderrAndWraps(t *testing.T) {
 	if !errors.As(err, &ee) {
 		t.Fatalf("want ExitError wrap, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "boom-on-stderr") {
-		t.Fatalf("stderr missing from error: %q", err.Error())
+	if msg := err.Error(); !strings.Contains(msg, "boom-on-stderr") {
+		t.Fatalf("stderr missing from error: %q", msg)
 	}
 }

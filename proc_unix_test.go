@@ -58,7 +58,9 @@ func TestKillProcessTree_GracefulOnSIGTERM(t *testing.T) {
 			}
 		}
 	case <-time.After(3 * time.Second):
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil && !isESRCH(err) {
+			t.Logf("cleanup kill: %v", err)
+		}
 		t.Fatal("process did not exit after killProcessTree")
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
@@ -103,7 +105,9 @@ func TestKillProcessTree_SIGKILLAfterGrace(t *testing.T) {
 	case err := <-done:
 		t.Fatalf("child exited before ready: %v", err)
 	case <-time.After(5 * time.Second):
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil && !isESRCH(err) {
+			t.Logf("cleanup kill: %v", err)
+		}
 		t.Fatal("timeout waiting for child ready")
 	}
 
@@ -139,7 +143,9 @@ func TestKillProcessTree_SIGKILLAfterGrace(t *testing.T) {
 			t.Fatalf("want SIGKILL, got signaled=%v signal=%v err=%v", status.Signaled(), status.Signal(), err)
 		}
 	case <-time.After(3 * time.Second):
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil && !isESRCH(err) {
+			t.Logf("cleanup kill: %v", err)
+		}
 		t.Fatal("stubborn process did not exit after grace+SIGKILL")
 	}
 	if elapsed := time.Since(start); elapsed < 80*time.Millisecond {

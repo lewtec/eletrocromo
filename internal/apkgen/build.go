@@ -107,7 +107,10 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	var buildErr error
 	defer func() {
 		if ephemeral && buildErr == nil && !opts.KeepWorkDir && !opts.GoOnly {
-			_ = os.RemoveAll(workDir)
+			if err := os.RemoveAll(workDir); err != nil && stderr != nil {
+				// best-effort cleanup of ephemeral work dir
+				fmt.Fprintf(stderr, "eletrocromo: cleanup work dir: %v\n", err)
+			}
 		}
 	}()
 
@@ -290,7 +293,10 @@ func AssembleDebug(workDir string, stdout, stderr io.Writer) (string, error) {
 	candidates := []string{
 		filepath.Join(workDir, "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
 	}
-	matches, _ := filepath.Glob(filepath.Join(workDir, "app", "build", "outputs", "apk", "debug", "*.apk"))
+	matches, err := filepath.Glob(filepath.Join(workDir, "app", "build", "outputs", "apk", "debug", "*.apk"))
+	if err != nil {
+		return "", fmt.Errorf("glob debug apk: %w", err)
+	}
 	candidates = append(candidates, matches...)
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() {
@@ -358,15 +364,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = in.Close() }()
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
-		return err
+		return errors.Join(err, in.Close())
 	}
 	_, copyErr := io.Copy(out, in)
-	closeErr := out.Close()
 	// Join so a close failure is not dropped when Copy already failed.
-	return errors.Join(copyErr, closeErr)
+	return errors.Join(copyErr, out.Close(), in.Close())
 }
 
 // DefaultOutAPK suggests dist/<last-label>-debug.apk under cwd.

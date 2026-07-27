@@ -20,17 +20,6 @@ import (
 	"github.com/lucasew/orvalho/pkg/workers"
 )
 
-// statusRecorder captures WriteHeader for post-request logging.
-type statusRecorder struct {
-	http.ResponseWriter
-	code int
-}
-
-func (s *statusRecorder) WriteHeader(code int) {
-	s.code = code
-	s.ResponseWriter.WriteHeader(code)
-}
-
 //go:embed embed/guest.js
 var guestJS string
 
@@ -38,6 +27,7 @@ var guestJS string
 var assetsRoot embed.FS
 
 func main() {
+	// main is allowed to own the process root context.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 

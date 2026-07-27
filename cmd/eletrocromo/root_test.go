@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,8 +34,8 @@ func TestBuild_BareErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for bare build")
 	}
-	if !strings.Contains(err.Error(), "icons") {
-		t.Fatalf("error should mention targets: %v", err)
+	if !errors.Is(err, ErrMissingBuildTarget) {
+		t.Fatalf("want ErrMissingBuildTarget, got %v", err)
 	}
 }
 

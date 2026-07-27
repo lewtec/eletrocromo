@@ -212,9 +212,13 @@ func (i Info) AndroidCode() int {
 // AndroidCodeFrom maps version (+ optional git commit count) to versionCode.
 func AndroidCodeFrom(version string, gitCommitCount int) int {
 	if m := semverCore.FindStringSubmatch(strings.TrimSpace(version)); len(m) == 4 {
-		maj, _ := strconv.Atoi(m[1])
-		min, _ := strconv.Atoi(m[2])
-		pat, _ := strconv.Atoi(m[3])
+		// Regex already matched digits; Atoi cannot fail for these groups.
+		maj, errMaj := strconv.Atoi(m[1])
+		min, errMin := strconv.Atoi(m[2])
+		pat, errPat := strconv.Atoi(m[3])
+		if errMaj != nil || errMin != nil || errPat != nil {
+			return 1
+		}
 		// Cap components so we stay in a reasonable int range.
 		if maj > 2099 {
 			maj = 2099

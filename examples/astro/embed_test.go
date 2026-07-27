@@ -36,7 +36,10 @@ func TestEmbeddedGuestServesHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if res.StatusCode != 200 {
 		t.Fatalf("status %d: %s", res.StatusCode, truncate(string(body), 400))
 	}

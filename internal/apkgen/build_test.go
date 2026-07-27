@@ -2,6 +2,7 @@ package apkgen
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,8 +100,8 @@ func TestAndroidSDK_MissingMessage(t *testing.T) {
 	if err == nil {
 		t.Skip("SDK present on machine")
 	}
-	if !strings.Contains(err.Error(), "ANDROID_HOME") {
-		t.Fatal(err)
+	if !errors.Is(err, ErrAndroidSDKNotFound) && !errors.Is(err, ErrSDKEnvNotDir) {
+		t.Fatalf("want SDK sentinel, got %v", err)
 	}
 }
 

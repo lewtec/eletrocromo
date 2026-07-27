@@ -8,6 +8,7 @@ package apkgen
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -18,11 +19,17 @@ import (
 
 	"github.com/lewtec/eletrocromo"
 	"github.com/lewtec/eletrocromo/internal/version"
-	"errors"
 )
 
 //go:embed all:template
 var templateFS embed.FS
+
+// Create / out-dir sentinels.
+var (
+	ErrOutDirRequired = errors.New("out dir is required")
+	ErrOutPathNotDir  = errors.New("out path exists and is not a directory")
+	ErrOutDirNotEmpty = errors.New("out dir is not empty (use --force)")
+)
 
 // Config is the project identity written into the generated tree and
 // eletrocromo.json (re-run / rebuild input).
@@ -72,7 +79,7 @@ func Create(opts Options) error {
 	}
 	out := strings.TrimSpace(opts.OutDir)
 	if out == "" {
-		return fmt.Errorf("out dir is required")
+		return ErrOutDirRequired
 	}
 	out, err = filepath.Abs(out)
 	if err != nil {
@@ -130,7 +137,7 @@ func prepareOutDir(out string, force bool) error {
 		return err
 	}
 	if !st.IsDir() {
-		return fmt.Errorf("out path exists and is not a directory: %s", out)
+		return fmt.Errorf("%w: %s", ErrOutPathNotDir, out)
 	}
 	entries, err := os.ReadDir(out)
 	if err != nil {
@@ -140,7 +147,7 @@ func prepareOutDir(out string, force bool) error {
 		return nil
 	}
 	if !force {
-		return fmt.Errorf("out dir is not empty (use --force): %s", out)
+		return fmt.Errorf("%w: %s", ErrOutDirNotEmpty, out)
 	}
 	// Wipe contents but keep the directory node.
 	for _, e := range entries {

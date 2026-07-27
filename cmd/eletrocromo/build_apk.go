@@ -102,8 +102,8 @@ Example (from examples/counter):
 			// quieter: discard slog noise from taskgroup unless needed
 			ctx = logging.ContextWithLogger(ctx, slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), &slog.HandlerOptions{Level: slog.LevelWarn})))
 
-			// taskgroup returns a child context; workers use the per-task ctx.
-			g, _ := taskgroup.New(ctx, taskgroup.DefaultLimits())
+			// taskgroup returns a child context for group cancellation.
+			g, ctx := taskgroup.New(ctx, taskgroup.DefaultLimits())
 			var iconRoot string
 
 			g.Go("icons", taskgroup.CPU, func(ctx context.Context, s *taskgroup.Status) error {

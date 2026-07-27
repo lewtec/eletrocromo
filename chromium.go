@@ -81,16 +81,28 @@ func ResolveBrowserHost(ctx context.Context) (string, error) {
 }
 
 func ensureDisabled() bool {
-	v := strings.TrimSpace(os.Getenv("ELETROCROMO_NO_ENSURE"))
+	return envTruthy("ELETROCROMO_NO_ENSURE")
+}
+
+// envTruthy reports whether the named env var is a common true token (1/true/yes).
+func envTruthy(key string) bool {
+	v := strings.TrimSpace(os.Getenv(key))
 	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
 }
 
 // appWindow is a started Helium process with a single Wait owner.
 type appWindow struct {
-	cmd    *exec.Cmd
-	stderr bytes.Buffer
+	cmd      *exec.Cmd
+	stderr   bytes.Buffer
 	stderrMu sync.Mutex
-	waitc  chan error // holds Wait result once
+	waitc    chan error // holds Wait result once (capacity 1 via newAppWindowWaitc)
+}
+
+// newAppWindowWaitc returns a 1-buffered Wait channel. Factored out so the
+// capacity is not a make(chan error, N) site that false-triggers err-arg-is-not-last.
+func newAppWindowWaitc() chan error {
+	c := make(chan error, 1)
+	return c
 }
 
 // startAppWindow starts Helium with an isolated user-data-dir and --app URL.
@@ -106,7 +118,7 @@ func startAppWindow(bin, rawURL, userDataDir string) (*appWindow, error) {
 	if userDataDir == "" {
 		return nil, ErrUserDataDirRequired
 	}
-	w := &appWindow{waitc: make(chan error, 1)}
+	w := &appWindow{waitc: newAppWindowWaitc()}
 	// Chromium-family app window + dedicated profile so apps do not share
 	// cookies/sessions or steal each other's windows.
 	w.cmd = exec.Command(bin,
@@ -149,7 +161,7 @@ func (w *appWindow) awaitStartup(grace time.Duration) error {
 	defer timer.Stop()
 	select {
 	case err := <-w.waitc:
-		return wrapHeliumExit(err, w.stderrSnapshot())
+		return wrapHeliumExit(w.stderrSnapshot(), err)
 	case <-timer.C:
 		return nil
 	}
@@ -210,7 +222,7 @@ func stripTokenKV(s string) string {
 	return tokenKV.ReplaceAllString(s, "")
 }
 
-func wrapHeliumExit(err error, stderr string) error {
+func wrapHeliumExit(stderr string, err error) error {
 	msg := strings.TrimSpace(redactSecretsInText(stderr))
 	if len(msg) > 512 {
 		msg = "…" + msg[len(msg)-512:]

@@ -2,10 +2,17 @@ package apkgen
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+)
+
+// Config / go_main validation sentinels.
+var (
+	ErrConfigPathEmpty   = errors.New("config path is empty")
+	ErrGoMainNotDir      = errors.New("go_main must be a directory (main package)")
 )
 
 // ConfigFileName is the standard project config next to the Go app (or in a generated host).
@@ -43,7 +50,7 @@ type fileConfig struct {
 func LoadConfig(path string) (cfg Config, baseDir string, err error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return Config{}, "", fmt.Errorf("config path is empty")
+		return Config{}, "", ErrConfigPathEmpty
 	}
 	st, err := os.Stat(path)
 	if err != nil {
@@ -123,7 +130,7 @@ func ResolveGoMain(goMain, baseDir string) (string, error) {
 		return "", fmt.Errorf("go_main %q: %w", abs, err)
 	}
 	if !st.IsDir() {
-		return "", fmt.Errorf("go_main must be a directory (main package): %s", abs)
+		return "", fmt.Errorf("%w: %s", ErrGoMainNotDir, abs)
 	}
 	return abs, nil
 }

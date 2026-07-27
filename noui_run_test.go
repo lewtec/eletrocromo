@@ -25,7 +25,9 @@ func TestRun_NoUI_PrintsReadyAndServes(t *testing.T) {
 		NoUI:  true,
 		Context: ctx,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte("pong"))
+			if _, err := w.Write([]byte("pong")); err != nil {
+				return
+			}
 		}),
 	}
 
@@ -65,8 +67,14 @@ func TestRun_NoUI_PrintsReadyAndServes(t *testing.T) {
 		cancel()
 		t.Fatal(err)
 	}
-	body, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if cerr := resp.Body.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
 	if resp.StatusCode != http.StatusOK || string(body) != "pong" {
 		cancel()
 		t.Fatalf("status=%d body=%q", resp.StatusCode, body)

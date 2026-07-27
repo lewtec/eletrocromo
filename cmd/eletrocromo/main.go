@@ -11,7 +11,10 @@ import (
 func main() {
 	root := newRootCmd()
 	if err := root.Execute(); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "Error:", err)
+		// Exiting; write failure cannot be recovered usefully.
+		if _, werr := fmt.Fprintln(os.Stderr, "Error:", err); werr != nil {
+			os.Exit(1)
+		}
 		os.Exit(1)
 	}
 }

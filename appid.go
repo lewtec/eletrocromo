@@ -1,6 +1,7 @@
 package eletrocromo
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,21 +14,29 @@ import (
 // at least two dot-separated labels of lowercase alphanumerics/underscores.
 var reverseDomainPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
 
+// App ID validation sentinels (errors.Is / wrap with %w).
+var (
+	ErrAppIDRequired      = errors.New("app id is required (reverse-domain, e.g. br.tec.lew.myapp)")
+	ErrAppIDTooLong       = errors.New("app id too long")
+	ErrAppIDPathChars     = errors.New("app id must not contain path separators")
+	ErrAppIDNotReverseDNS = errors.New("app id must be reverse-domain notation (e.g. br.tec.lew.myapp)")
+)
+
 // ValidateAppID checks reverse-domain application identity (e.g. br.tec.lew.counter).
 // The same string isolates Helium --user-data-dir and is intended for future APK package names.
 func ValidateAppID(id string) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return fmt.Errorf("app id is required (reverse-domain, e.g. br.tec.lew.myapp)")
+		return ErrAppIDRequired
 	}
 	if len(id) > 200 {
-		return fmt.Errorf("app id too long")
+		return ErrAppIDTooLong
 	}
 	if strings.Contains(id, "..") || strings.ContainsAny(id, `/\`) {
-		return fmt.Errorf("app id must not contain path separators")
+		return ErrAppIDPathChars
 	}
 	if !reverseDomainPattern.MatchString(id) {
-		return fmt.Errorf("app id %q must be reverse-domain notation (e.g. br.tec.lew.myapp)", id)
+		return fmt.Errorf("%w: %q", ErrAppIDNotReverseDNS, id)
 	}
 	return nil
 }

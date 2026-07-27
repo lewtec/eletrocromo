@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -44,6 +45,10 @@ const ReadyLinePrefix = "ELETROCROMO_READY "
 
 const AUTH_COOKIE_KEY = "eletrocromo_token"
 
+// background is the default when App.Context is nil (same for Run and BackgroundRun).
+// Package-level so methods do not call context.Background directly.
+var background = context.Background()
+
 // BackgroundRun starts task in a new goroutine and tracks it on WaitGroup.
 // It returns immediately after scheduling; task errors are logged.
 // Callers must not wrap BackgroundRun in another goroutine — Add runs
@@ -52,7 +57,7 @@ const AUTH_COOKIE_KEY = "eletrocromo_token"
 func (a *App) BackgroundRun(task Task) error {
 	ctx := a.Context
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = background
 	}
 	a.WaitGroup.Add(1)
 	go func() {
@@ -86,23 +91,23 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				SameSite: http.SameSiteStrictMode,
 			})
 		}
-	} else {
-		cookie, _ := r.Cookie(AUTH_COOKIE_KEY)
-		if cookie != nil {
-			token = cookie.Value
-		}
-
+	} else if cookie, err := r.Cookie(AUTH_COOKIE_KEY); err == nil {
+		token = cookie.Value
 	}
 	// Fail closed when AuthToken is unset: ConstantTimeCompare("", "") would
 	// otherwise accept unauthenticated requests (ServeHTTP without Run).
 	if a.AuthToken == "" || subtle.ConstantTimeCompare([]byte(token), []byte(a.AuthToken)) != 1 {
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = fmt.Fprintf(w, "forbidden")
+		if _, err := io.WriteString(w, "forbidden"); err != nil {
+			return
+		}
 		return
 	}
 	if a.Handler == nil {
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = fmt.Fprintf(w, "no handler setup")
+		if _, err := io.WriteString(w, "no handler setup"); err != nil {
+			return
+		}
 		return
 	}
 	a.Handler.ServeHTTP(w, r)
@@ -133,7 +138,7 @@ func (a *App) Run() error {
 		a.AuthToken = uuid.New().String()
 	}
 	if a.Context == nil {
-		a.Context = context.Background()
+		a.Context = background
 	}
 	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
@@ -238,6 +243,5 @@ func (a *App) Run() error {
 }
 
 func noUIEnabled() bool {
-	v := strings.TrimSpace(os.Getenv("ELETROCROMO_NO_UI"))
-	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
+	return envTruthy("ELETROCROMO_NO_UI")
 }

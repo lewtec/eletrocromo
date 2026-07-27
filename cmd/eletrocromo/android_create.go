@@ -73,8 +73,12 @@ Example:
 	cmd.Flags().StringVar(&version, "version", "", "Android versionName (default: from VCS / -X)")
 	cmd.Flags().IntVar(&code, "code", 0, "Android versionCode (default: from version / git)")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite non-empty --out")
-	_ = cmd.MarkFlagRequired("id")
-	_ = cmd.MarkFlagRequired("out")
+	if err := cmd.MarkFlagRequired("id"); err != nil {
+		panic(err)
+	}
+	if err := cmd.MarkFlagRequired("out"); err != nil {
+		panic(err)
+	}
 
 	return cmd
 }

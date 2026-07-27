@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -17,6 +18,30 @@ import (
 	"strings"
 	"time"
 )
+
+// Bootstrap sentinels (wrap with %w where context is attached).
+var (
+	ErrWorkspacedUnsupportedGOOS   = errors.New("bootstrap workspaced: unsupported GOOS")
+	ErrWorkspacedUnsupportedGOARCH = errors.New("bootstrap workspaced: unsupported GOARCH")
+	ErrWorkspacedNoChecksum        = errors.New("bootstrap workspaced: no pinned checksum")
+	ErrWorkspacedDownload          = errors.New("bootstrap workspaced: download failed")
+	ErrWorkspacedChecksumMismatch  = errors.New("bootstrap workspaced: checksum mismatch")
+	ErrWorkspacedBinaryMissing     = errors.New("binary not found in archive")
+)
+
+// removeBestEffort deletes path; cleanup paths ignore failure (file may already be gone).
+func removeBestEffort(path string) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		// best-effort: nothing to report to the caller mid-cleanup
+	}
+}
+
+// closeAssign closes c; if *err is still nil, stores the close error there.
+func closeAssign(err *error, c io.Closer) {
+	if cerr := c.Close(); *err == nil {
+		*err = cerr
+	}
+}
 
 // Pinned workspaced release used when bootstrapping the ensure helper.
 // Bump intentionally; checksums must match the release assets.
@@ -75,7 +100,7 @@ func workspacedAssetName() (string, error) {
 	case "windows":
 		osPart = "Windows"
 	default:
-		return "", fmt.Errorf("bootstrap workspaced: unsupported GOOS %s", runtime.GOOS)
+		return "", fmt.Errorf("%w %s", ErrWorkspacedUnsupportedGOOS, runtime.GOOS)
 	}
 	var archPart string
 	switch runtime.GOARCH {
@@ -86,7 +111,7 @@ func workspacedAssetName() (string, error) {
 	case "386":
 		archPart = "i386"
 	default:
-		return "", fmt.Errorf("bootstrap workspaced: unsupported GOARCH %s", runtime.GOARCH)
+		return "", fmt.Errorf("%w %s", ErrWorkspacedUnsupportedGOARCH, runtime.GOARCH)
 	}
 	ext := ".tar.gz"
 	if runtime.GOOS == "windows" {
@@ -113,7 +138,7 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 	}
 	wantSum, ok := workspacedAssetSHA256[asset]
 	if !ok {
-		return "", fmt.Errorf("bootstrap workspaced: no pinned checksum for %s", asset)
+		return "", fmt.Errorf("%w for %s", ErrWorkspacedNoChecksum, asset)
 	}
 
 	dir, err := workspacedCacheDir()
@@ -139,8 +164,8 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("bootstrap workspaced: download: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		return "", fmt.Errorf("bootstrap workspaced: download %s: HTTP %s", url, resp.Status)
+		closeErr := resp.Body.Close()
+		return "", errors.Join(fmt.Errorf("%w: %s: HTTP %s", ErrWorkspacedDownload, url, resp.Status), closeErr)
 	}
 
 	archivePath := filepath.Join(dir, asset)
@@ -157,29 +182,29 @@ func bootstrapWorkspaced(ctx context.Context) (string, error) {
 	bodyCloseErr := body.Close()
 	fileCloseErr := f.Close()
 	if copyErr != nil {
-		_ = os.Remove(archivePath)
+		removeBestEffort(archivePath)
 		return "", fmt.Errorf("bootstrap workspaced: write archive: %w", copyErr)
 	}
 	if bodyCloseErr != nil {
-		_ = os.Remove(archivePath)
+		removeBestEffort(archivePath)
 		return "", fmt.Errorf("bootstrap workspaced: close body: %w", bodyCloseErr)
 	}
 	if fileCloseErr != nil {
-		_ = os.Remove(archivePath)
+		removeBestEffort(archivePath)
 		return "", fileCloseErr
 	}
 	got := hex.EncodeToString(h.Sum(nil))
 	if got != wantSum {
-		_ = os.Remove(archivePath)
-		return "", fmt.Errorf("bootstrap workspaced: checksum mismatch for %s: got %s want %s", asset, got, wantSum)
+		removeBestEffort(archivePath)
+		return "", fmt.Errorf("%w for %s: got %s want %s", ErrWorkspacedChecksumMismatch, asset, got, wantSum)
 	}
 
 	if err := extractWorkspacedBinary(archivePath, binPath, binName); err != nil {
-		_ = os.Remove(binPath)
+		removeBestEffort(binPath)
 		return "", fmt.Errorf("bootstrap workspaced: extract: %w", err)
 	}
 	if err := os.Chmod(binPath, 0o755); err != nil {
-		_ = os.Remove(binPath)
+		removeBestEffort(binPath)
 		return "", err
 	}
 	return binPath, nil
@@ -197,20 +222,12 @@ func extractTarGzBinary(archivePath, destPath, binName string) (err error) {
 	if openErr != nil {
 		return openErr
 	}
-	defer func() {
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
-	}()
+	defer closeAssign(&err, f)
 	gz, gzErr := gzip.NewReader(f)
 	if gzErr != nil {
 		return gzErr
 	}
-	defer func() {
-		if cerr := gz.Close(); err == nil {
-			err = cerr
-		}
-	}()
+	defer closeAssign(&err, gz)
 	tr := tar.NewReader(gz)
 	for {
 		hdr, nextErr := tr.Next()
@@ -234,16 +251,16 @@ func extractTarGzBinary(archivePath, destPath, binName string) (err error) {
 		_, copyErr := io.Copy(out, tr)
 		closeErr := out.Close()
 		if copyErr != nil {
-			_ = os.Remove(destPath)
+			removeBestEffort(destPath)
 			return copyErr
 		}
 		if closeErr != nil {
-			_ = os.Remove(destPath)
+			removeBestEffort(destPath)
 			return closeErr
 		}
 		return nil
 	}
-	return fmt.Errorf("binary %q not found in archive", binName)
+	return fmt.Errorf("%w: %q", ErrWorkspacedBinaryMissing, binName)
 }
 
 func extractZipBinary(archivePath, destPath, binName string) (err error) {
@@ -251,11 +268,7 @@ func extractZipBinary(archivePath, destPath, binName string) (err error) {
 	if openErr != nil {
 		return openErr
 	}
-	defer func() {
-		if cerr := r.Close(); err == nil {
-			err = cerr
-		}
-	}()
+	defer closeAssign(&err, r)
 	for _, zf := range r.File {
 		base := filepath.Base(zf.Name)
 		if base != binName && base != "workspaced" && base != "workspaced.exe" {
@@ -267,25 +280,24 @@ func extractZipBinary(archivePath, destPath, binName string) (err error) {
 		}
 		out, outErr := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 		if outErr != nil {
-			_ = rc.Close()
-			return outErr
+			return errors.Join(outErr, rc.Close())
 		}
 		_, copyErr := io.Copy(out, rc)
 		rcCloseErr := rc.Close()
 		closeErr := out.Close()
 		if copyErr != nil {
-			_ = os.Remove(destPath)
+			removeBestEffort(destPath)
 			return copyErr
 		}
 		if rcCloseErr != nil {
-			_ = os.Remove(destPath)
+			removeBestEffort(destPath)
 			return rcCloseErr
 		}
 		if closeErr != nil {
-			_ = os.Remove(destPath)
+			removeBestEffort(destPath)
 			return closeErr
 		}
 		return nil
 	}
-	return fmt.Errorf("binary %q not found in archive", binName)
+	return fmt.Errorf("%w: %q", ErrWorkspacedBinaryMissing, binName)
 }
