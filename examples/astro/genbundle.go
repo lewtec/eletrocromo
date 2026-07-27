@@ -24,7 +24,7 @@ func main() {
 	workerDir := filepath.Join(root, "worker")
 	entry := filepath.Join(workerDir, "entry.mjs")
 	if _, err := os.Stat(entry); err != nil {
-		fatal(fmt.Errorf("missing %s — run: mise run assemble", entry))
+		fatal(fmt.Errorf("missing %s — run: mise run assemble: %w", entry, err))
 	}
 	esbuild, err := exec.LookPath("esbuild")
 	if err != nil {
