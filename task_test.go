@@ -3,6 +3,7 @@ package eletrocromo
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -51,6 +52,9 @@ func TestNewBrowserLaunchTask_InvalidURL(t *testing.T) {
 	err := task.Run(t.Context())
 	if err == nil {
 		t.Fatal("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "browser launch URL") {
+		t.Fatalf("expected wrapped parse error, got %v", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package eletrocromo
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"time"
 )
@@ -44,7 +45,7 @@ func NewBrowserLaunchTask(urlStr, appID string) Task {
 		}
 		u, err := url.Parse(urlStr)
 		if err != nil {
-			return err
+			return fmt.Errorf("browser launch URL: %w", err)
 		}
 		return LaunchChromium(ctx, u, appID)
 	})
