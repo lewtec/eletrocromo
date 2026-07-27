@@ -1,10 +1,15 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
 )
+
+// ErrMissingBuildTarget is returned when `build` is invoked with no subcommand
+// (icons, android, …). Callers can use errors.Is.
+var ErrMissingBuildTarget = errors.New("missing build target; use one of: icons, android")
 
 func newBuildCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -19,7 +24,7 @@ Targets:
 Bare "build" with no target is an error.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return fmt.Errorf("missing build target; use one of: icons, android\n\nExamples:\n  eletrocromo build icons\n  eletrocromo build android")
+			return fmt.Errorf("%w\n\nExamples:\n  eletrocromo build icons\n  eletrocromo build android", ErrMissingBuildTarget)
 		},
 	}
 	cmd.AddCommand(newBuildIconsCmd())
