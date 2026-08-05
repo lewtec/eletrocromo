@@ -18,6 +18,12 @@ var (
 // ConfigFileName is the standard project config next to the Go app (or in a generated host).
 const ConfigFileName = "eletrocromo.json"
 
+// Sentinel errors for config load/resolve (errors.Is / wrap with %w).
+var (
+	ErrConfigPathEmpty = errors.New("config path is empty")
+	ErrGoMainNotDir    = errors.New("go_main must be a directory (main package)")
+)
+
 // DefaultABIs for the packaged APK.
 //
 // With CGO_ENABLED=0 only android/arm64 links today (no NDK). Prefer arm64-v8a
