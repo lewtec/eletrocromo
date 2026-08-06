@@ -63,42 +63,66 @@ SVG is not rasterized in-process yet — convert to PNG/JPEG first
 	return cmd
 }
 
+// defaultConfigPath returns cwd/eletrocromo.json when it is a regular file.
+func defaultConfigPath(cwd string) string {
+	try := filepath.Join(cwd, apkgen.ConfigFileName)
+	if st, err := os.Stat(try); err == nil && !st.IsDir() {
+		return try
+	}
+	return ""
+}
+
+// absPath joins base when p is non-empty and relative; empty stays empty.
+func absPath(base, p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(base, p)
+}
+
+// resolveIconOutput returns an absolute icon tree root (default dist/icons under cwd).
+func resolveIconOutput(cwd, outputFlag string) string {
+	out := strings.TrimSpace(outputFlag)
+	if out == "" {
+		out = icons.DefaultOutputDir
+	}
+	if !filepath.IsAbs(out) {
+		return filepath.Join(cwd, out)
+	}
+	return out
+}
+
+// resolveIconSource returns absolute master path (empty = default mark).
+// Flag (cwd-relative) wins over config icon (baseDir-relative).
+func resolveIconSource(cwd, iconFlag, baseDir, cfgIcon string) string {
+	if p := absPath(cwd, iconFlag); p != "" {
+		return p
+	}
+	return absPath(baseDir, cfgIcon)
+}
+
 // resolveIconIO returns absolute master path (empty = default mark) and output dir.
 func resolveIconIO(cwd, configPath, iconFlag, outputFlag string) (source, output string, err error) {
-	output = strings.TrimSpace(outputFlag)
-	if output == "" {
-		output = icons.DefaultOutputDir
-	}
-	if !filepath.IsAbs(output) {
-		output = filepath.Join(cwd, output)
-	}
+	output = resolveIconOutput(cwd, outputFlag)
 
-	iconFlag = strings.TrimSpace(iconFlag)
-	if iconFlag != "" {
-		if !filepath.IsAbs(iconFlag) {
-			iconFlag = filepath.Join(cwd, iconFlag)
-		}
-		return iconFlag, output, nil
+	if p := absPath(cwd, iconFlag); p != "" {
+		return p, output, nil
 	}
 
 	cfgPath := strings.TrimSpace(configPath)
 	if cfgPath == "" {
-		try := filepath.Join(cwd, apkgen.ConfigFileName)
-		if st, err := os.Stat(try); err == nil && !st.IsDir() {
-			cfgPath = try
-		}
+		cfgPath = defaultConfigPath(cwd)
 	}
 	if cfgPath != "" {
 		cfg, baseDir, err := apkgen.LoadConfig(cfgPath)
 		if err != nil {
 			return "", "", err
 		}
-		if p := strings.TrimSpace(cfg.Icon); p != "" {
-			if !filepath.IsAbs(p) {
-				p = filepath.Join(baseDir, p)
-			}
-			return p, output, nil
-		}
+		return resolveIconSource(cwd, "", baseDir, cfg.Icon), output, nil
 	}
 	return "", output, nil
 }
