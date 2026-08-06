@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/apkgen"
@@ -74,24 +73,9 @@ Example (from examples/counter):
 				return fmt.Errorf("%w: set package_id in %s or pass --id", ErrMissingPackageID, apkgen.ConfigFileName)
 			}
 
-			// Resolve icon source: flag > config
-			iconSrc := strings.TrimSpace(iconPath)
-			if iconSrc == "" {
-				iconSrc = strings.TrimSpace(cfg.Icon)
-				if iconSrc != "" && !filepath.IsAbs(iconSrc) {
-					iconSrc = filepath.Join(baseDir, iconSrc)
-				}
-			} else if !filepath.IsAbs(iconSrc) {
-				iconSrc = filepath.Join(cwd, iconSrc)
-			}
-
-			iconOut := strings.TrimSpace(iconOutput)
-			if iconOut == "" {
-				iconOut = icons.DefaultOutputDir
-			}
-			if !filepath.IsAbs(iconOut) {
-				iconOut = filepath.Join(cwd, iconOut)
-			}
+			// Same icon flag/config/output rules as "build icons".
+			iconSrc := resolveIconSource(cwd, iconPath, baseDir, cfg.Icon)
+			iconOut := resolveIconOutput(cwd, iconOutput)
 
 			outAPK := strings.TrimSpace(out)
 			if outAPK == "" && !goOnly {
@@ -186,10 +170,7 @@ func loadAPKConfig(cwd, configPath, id, name, goMain, version string, code int, 
 	baseDir := cwd
 	cfgPath := strings.TrimSpace(configPath)
 	if cfgPath == "" {
-		try := filepath.Join(cwd, apkgen.ConfigFileName)
-		if st, err := os.Stat(try); err == nil && !st.IsDir() {
-			cfgPath = try
-		}
+		cfgPath = defaultConfigPath(cwd)
 	}
 	if cfgPath != "" {
 		loaded, dir, err := apkgen.LoadConfig(cfgPath)
