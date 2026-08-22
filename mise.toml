@@ -51,6 +51,18 @@ go run ./cmd/eletrocromo build macos \
   --go-only \
   --workdir dist/macos-counter
 """
+"ios:counter" = """
+go run ./cmd/eletrocromo build ios \
+  --config examples/counter/eletrocromo.json \
+  --out dist/Counter.app \
+  --workdir dist/ios-counter
+"""
+"ios:counter:go" = """
+go run ./cmd/eletrocromo build ios \
+  --config examples/counter/eletrocromo.json \
+  --go-only \
+  --workdir dist/ios-counter
+"""
 "icons" = "go run ./cmd/eletrocromo build icons --refresh-icons"
 
 # Dogfood host resolve + Helium --app (Ctrl+C to quit).
