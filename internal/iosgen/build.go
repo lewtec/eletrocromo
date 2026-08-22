@@ -278,10 +278,7 @@ func buildArchive(dest, goMainDir, workDir, sdk string, stamp version.Info, stdo
 		return err
 	}
 
-	goarch := "arm64"
-	if runtime.GOARCH == "amd64" && sdk == SDKSimulator {
-		goarch = "amd64"
-	}
+	goarch, _ := hostIOSArch(sdk)
 
 	cmd := exec.Command("go", "build",
 		"-buildmode=c-archive",
@@ -341,6 +338,7 @@ func assembleDebug(workDir, product, sdk string, stdout, stderr io.Writer) (stri
 	}
 
 	dest, destName := xcodeDestination(sdk)
+	_, xArch := hostIOSArch(sdk)
 	derived := filepath.Join(workDir, "build", "DerivedData")
 	proj := filepath.Join(workDir, product+".xcodeproj")
 	cmd := exec.Command("xcodebuild",
@@ -354,7 +352,10 @@ func assembleDebug(workDir, product, sdk string, stdout, stderr io.Writer) (stri
 		"CODE_SIGN_IDENTITY=-",
 		"CODE_SIGNING_REQUIRED=NO",
 		"CODE_SIGNING_ALLOWED=NO",
+		"ENABLE_DEBUG_DYLIB=NO",
+		"ARCHS="+xArch,
 		"ONLY_ACTIVE_ARCH=YES",
+		"EXCLUDED_ARCHS="+excludedArch(xArch),
 		"build",
 	)
 	cmd.Dir = workDir
@@ -369,6 +370,20 @@ func assembleDebug(workDir, product, sdk string, stdout, stderr io.Writer) (stri
 		return "", fmt.Errorf("%w: %s", ErrDebugAppMissing, app)
 	}
 	return app, nil
+}
+
+func hostIOSArch(sdk string) (goarch, xArch string) {
+	if runtime.GOARCH == "amd64" && sdk == SDKSimulator {
+		return "amd64", "x86_64"
+	}
+	return "arm64", "arm64"
+}
+
+func excludedArch(xArch string) string {
+	if xArch == "arm64" {
+		return "x86_64"
+	}
+	return "arm64"
 }
 
 func xcodeDestination(sdk string) (destination, productsDir string) {
