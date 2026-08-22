@@ -109,6 +109,17 @@ func TestCreate_WritesHost(t *testing.T) {
 	if !strings.Contains(string(swift), "ELETROCROMO_NO_UI") {
 		t.Fatalf("helper env missing:\n%s", swift)
 	}
+
+	ui, err := os.ReadFile(filepath.Join(out, "Sources/MainWindow.swift"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(ui), "NSTitlebarAccessoryViewController") {
+		t.Fatalf("titlebar reload missing:\n%s", ui)
+	}
+	if !strings.Contains(string(ui), "arrow.clockwise") {
+		t.Fatalf("reload symbol missing:\n%s", ui)
+	}
 }
 
 func TestCreate_RejectsBadID(t *testing.T) {

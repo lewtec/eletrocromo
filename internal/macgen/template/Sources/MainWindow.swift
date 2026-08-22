@@ -104,6 +104,8 @@ final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDe
             retryButton.centerXAnchor.constraint(equalTo: splash.centerXAnchor),
         ])
 
+        installTitlebarReload()
+
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.modifierFlags.contains(.command),
                event.charactersIgnoringModifiers == "r"
@@ -113,6 +115,30 @@ final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDe
             }
             return event
         }
+    }
+
+    /// Reload sits in the existing title bar (trailing). Not a toolbar strip.
+    private func installTitlebarReload() {
+        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 28, height: 22))
+        button.bezelStyle = .inline
+        button.isBordered = false
+        button.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Reload")
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
+        button.toolTip = "Reload"
+        button.setAccessibilityLabel("Reload")
+        button.target = self
+        button.action = #selector(reloadTapped)
+
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 32, height: 22))
+        button.frame = host.bounds
+        button.autoresizingMask = [.width, .height]
+        host.addSubview(button)
+
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .right
+        accessory.view = host
+        window.addTitlebarAccessoryViewController(accessory)
     }
 
     deinit {
@@ -163,6 +189,10 @@ final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDe
 
     @objc private func retryTapped() {
         onRetry?()
+    }
+
+    @objc private func reloadTapped() {
+        reload()
     }
 
     func windowWillClose(_ notification: Notification) {
