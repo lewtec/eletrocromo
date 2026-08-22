@@ -73,6 +73,7 @@ go run ./cmd/eletrocromo version
 go run ./cmd/eletrocromo build icons          # → dist/icons (default mark or config icon)
 go run ./cmd/eletrocromo build android       # JIT APK; generates icons if missing
 go run ./cmd/eletrocromo build macos         # JIT unsigned Debug .app (Mac + Xcode)
+go run ./cmd/eletrocromo build ios           # JIT Debug .app (Mac + Xcode iOS SDK)
 # or: mise run build:cli && ./bin/eletrocromo version
 ```
 
@@ -180,3 +181,31 @@ mise run macos:counter
 
 The `.app` is unsigned Debug. First open: right-click → Open. Off-loopback
 http(s) links open in the default browser. Packaging lives in `internal/macgen/`.
+
+### iOS `.app` (scaffold)
+
+Same config and READY-file handshake as Android/macOS. iOS cannot exec a
+helper, so the Go app is a `c-archive` (`EletrocromoStart`) linked into a
+UIKit WKWebView host. Full `.app` needs **Xcode** (iOS SDK) and **xcodegen**
+on a Mac. Launch needs an **iOS Simulator runtime** (or a signed device).
+
+```bash
+go run ./cmd/eletrocromo build ios \
+  --config examples/counter/eletrocromo.json \
+  --go-only \
+  --workdir dist/ios-counter
+```
+
+On a Mac with Xcode:
+
+```bash
+go run ./cmd/eletrocromo build ios \
+  --config examples/counter/eletrocromo.json \
+  --out dist/Counter.app
+
+mise run ios:counter
+```
+
+Default SDK is `iphonesimulator`. Use `--sdk iphoneos` for a device archive.
+The `.app` is Debug, unsigned (`CODE_SIGNING_ALLOWED=NO`). Off-loopback
+http(s) links open in Safari. Packaging lives in `internal/iosgen/`.

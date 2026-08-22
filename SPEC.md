@@ -90,6 +90,7 @@ Runtime library and packaging CLI share a repo but **different dependency rules*
 │       │ missing / --refresh-icons                           │
 │  build android ──► JIT Gradle host + jniLibs + APK          │
 │  build macos   ──► JIT XcodeGen host + darwin Go + .app     │
+│  build ios     ──► JIT XcodeGen host + ios c-archive + .app │
 │       │            (icns / mipmaps from icon tree)          │
 │       └── taskgroup orchestration (workspaced import OK)    │
 │                                                             │
@@ -251,6 +252,7 @@ Tray and lifecycle must work **without CGo**. If a approach requires CGo, it is 
 | **Windows** | Best-effort later; launching UI + server may work; no tray/lifecycle parity promise | Icon matrix includes `.ico`; PE embedding left to user/GR |
 | **macOS** | Best-effort Helium `Run()`; no tray/lifecycle parity promise | Icon matrix includes `.icns`; **`build macos`** JIT unsigned Debug `.app` (WKWebView host) |
 | **Android** | N/A (not Helium desktop) | APK via packaging CLI; launcher mipmaps from icon pipeline |
+| **iOS / iPadOS** | N/A (not Helium desktop) | Scaffold: `build ios` JIT Debug `.app` (WKWebView + in-process c-archive). Not grilled. |
 
 ## v1 done checklist (Linux desktop runtime)
 
@@ -392,6 +394,8 @@ eletrocromo build android      → JIT scaffold + cross-compile Go + APK;
                                  runs icons first if outputs missing
 eletrocromo build macos        → JIT XcodeGen + Swift host + darwin Go + .app;
                                  runs icons first if macos/icon.icns is missing
+eletrocromo build ios          → JIT XcodeGen + UIKit host + GOOS=ios c-archive + .app;
+                                 scaffold (not grilled); READY file only; Mac + Xcode
 ```
 
 | Flag / behavior | Rule |
@@ -400,8 +404,8 @@ eletrocromo build macos        → JIT XcodeGen + Swift host + darwin Go + .app;
 | `--icon` | Master image path |
 | `--output` | Icon tree root (default `dist/icons`) |
 | `--refresh-icons` | Force full icon regen; without it, generate only when **expected outputs are missing** |
-| Scaffold | **Just-in-time** for android and macos (no happy-path `create` / commit host project) |
-| Orchestration | **workspaced `taskgroup`** (named tasks, deps: icons → android/macos steps) |
+| Scaffold | **Just-in-time** for android, macos, and ios (no happy-path `create` / commit host project) |
+| Orchestration | **workspaced `taskgroup`** (named tasks, deps: icons → android/macos/ios steps) |
 
 Migrate existing `eletrocromo android build` / `android create` to the `build …` surface; `create` is not the product path and may be removed after migration.
 
@@ -484,7 +488,7 @@ Existing fields remain (`schema_version`, `package_id`, `app_name`, `go_main`, `
 | Lifetime | Context cancel; browser lifecycle partial | Default window-owned; flag background + tray |
 | Tray / lockfile | Absent or partial | Linux v1 requirement |
 | Example | counter / ticker / basic / astro | Template counter + mode flag as dogfood bar |
-| Packaging CLI | `build icons` / `build android`; default mark; full icon matrix; taskgroup | add `build macos` JIT unsigned Debug `.app` (WKWebView host) |
+| Packaging CLI | `build icons` / `build android` / `build macos`; default mark; full icon matrix; taskgroup | `build ios` scaffold: JIT Debug `.app` (WKWebView + c-archive). Grill before treating as product |
 | workspaced dep | Subprocess only (library + CLI) | Library: subprocess only. CLI: may `require` workspaced modules + tool ensure |
 | README | Architecture + CLI + APK blurb | Align with this SPEC (desktop + packaging) |
 
@@ -526,6 +530,7 @@ Existing fields remain (`schema_version`, `package_id`, `app_name`, `go_main`, `
 4. Fold android into `build android`; icons dep; mipmaps into JIT workdir; demote `create`.
 5. Docs: GR OSS + Pro recipes; README packaging section.
 6. `build macos`: ephemeral XcodeGen + Swift WKWebView host; host-arch Go; unsigned Debug `.app`; icons → icns; `--go-only`.
+7. `build ios` (scaffold): ephemeral XcodeGen + UIKit WKWebView; `c-archive` (`EletrocromoStart`); READY file; simulator Debug; `--go-only`. Grill before App Store / device product claims.
 
 ## Open implementation choices (not product questions)
 
