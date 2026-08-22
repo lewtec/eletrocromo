@@ -41,6 +41,16 @@ func TestDefaultOutApp(t *testing.T) {
 	}
 }
 
+func TestExcludedArch(t *testing.T) {
+	t.Parallel()
+	if got := excludedArch("arm64"); got != "x86_64" {
+		t.Fatalf("arm64: got %q", got)
+	}
+	if got := excludedArch("x86_64"); got != "arm64" {
+		t.Fatalf("x86_64: got %q", got)
+	}
+}
+
 func TestNormalizeSDK(t *testing.T) {
 	t.Parallel()
 	got, err := normalizeSDK("")
@@ -107,6 +117,9 @@ func TestCreate_WritesHost(t *testing.T) {
 	}
 	if !strings.Contains(s, "SWIFT_OBJC_BRIDGING_HEADER") {
 		t.Fatalf("bridging header missing:\n%s", s)
+	}
+	if !strings.Contains(s, "ENABLE_DEBUG_DYLIB: NO") {
+		t.Fatalf("debug dylib not off:\n%s", s)
 	}
 
 	plist, err := os.ReadFile(filepath.Join(out, "Info.plist"))
