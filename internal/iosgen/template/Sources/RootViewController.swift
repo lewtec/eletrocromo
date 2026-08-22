@@ -5,6 +5,7 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
     var onRetry: (() -> Void)?
 
     private let webView: WKWebView
+    private let refresh = UIRefreshControl()
     private let splash = UIView()
     private let statusLabel = UILabel()
     private let detailLabel = UILabel()
@@ -31,11 +32,14 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
-        title = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
-            ?? "eletrocromo"
 
         webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.scrollView.alwaysBounceVertical = true
+        webView.scrollView.contentInsetAdjustmentBehavior = .automatic
+        refresh.addTarget(self, action: #selector(pullToRefresh), for: .valueChanged)
+        refresh.accessibilityLabel = "Reload"
+        webView.scrollView.refreshControl = refresh
+
         splash.translatesAutoresizingMaskIntoConstraints = false
         splash.backgroundColor = .systemBackground
 
@@ -60,15 +64,6 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
         retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
         retryButton.isHidden = true
         retryButton.accessibilityLabel = "Retry"
-
-        let reload = UIBarButtonItem(
-            image: UIImage(systemName: "arrow.clockwise"),
-            style: .plain,
-            target: self,
-            action: #selector(reloadTapped)
-        )
-        reload.accessibilityLabel = "Reload"
-        navigationItem.rightBarButtonItem = reload
 
         view.addSubview(webView)
         view.addSubview(splash)
@@ -101,6 +96,7 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
     }
 
     func showSplash(status: String, detail: String?, error: Bool) {
+        endRefresh()
         splash.isHidden = false
         webView.isHidden = true
         statusLabel.text = status
@@ -140,20 +136,29 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
         onRetry?()
     }
 
-    @objc private func reloadTapped() {
+    @objc private func pullToRefresh() {
         reload()
+    }
+
+    private func endRefresh() {
+        if refresh.isRefreshing {
+            refresh.endRefreshing()
+        }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         splash.isHidden = true
         webView.isHidden = false
+        endRefresh()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        endRefresh()
         showSplash(status: "Load failed", detail: error.localizedDescription, error: true)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        endRefresh()
         showSplash(status: "Load failed", detail: error.localizedDescription, error: true)
     }
 

@@ -16,7 +16,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             self?.restartServer()
         }
         let window = UIWindow(frame: UIScreen.main.bounds)
-        window.rootViewController = UINavigationController(rootViewController: root)
+        window.rootViewController = root
         window.makeKeyAndVisible()
         self.window = window
         startServer()

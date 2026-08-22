@@ -168,11 +168,23 @@ func TestCreate_WritesHost(t *testing.T) {
 	if !strings.Contains(us, "WKWebView") {
 		t.Fatalf("webview missing:\n%s", us)
 	}
-	if !strings.Contains(us, "arrow.clockwise") {
-		t.Fatalf("reload symbol missing:\n%s", us)
+	if !strings.Contains(us, "UIRefreshControl") {
+		t.Fatalf("pull-to-refresh missing:\n%s", us)
+	}
+	if strings.Contains(us, "UIBarButtonItem") || strings.Contains(us, "arrow.clockwise") {
+		t.Fatalf("navbar reload still present:\n%s", us)
 	}
 	if !strings.Contains(us, "UIApplication.shared.open") {
 		t.Fatalf("off-loopback open missing:\n%s", us)
+	}
+
+	delegate, err := os.ReadFile(filepath.Join(out, "Sources/AppDelegate.swift"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ds := string(delegate)
+	if strings.Contains(ds, "UINavigationController") {
+		t.Fatalf("nav controller still wrapping root:\n%s", ds)
 	}
 
 	hdr, err := os.ReadFile(filepath.Join(out, "Sources/eletrocromo-Bridging-Header.h"))
