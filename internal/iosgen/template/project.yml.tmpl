@@ -21,6 +21,7 @@ settings:
     LIBRARY_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/lib
     HEADER_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/lib
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    INFOPLIST_KEY_UILaunchStoryboardName: LaunchScreen
 targets:
   {{.Product}}:
     type: application
@@ -29,6 +30,7 @@ targets:
       - path: Sources
       - path: Assets.xcassets
         buildPhase: resources
+      - path: LaunchScreen.storyboard
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: {{.PackageID}}

@@ -238,15 +238,19 @@ func resolveWorkDir(opts BuildOptions) (workDir string, cleanup bool, err error)
 	return dir, true, nil
 }
 
+// SplashPointSize is the on-screen logo size (points) for the launch
+// storyboard and the in-app splash. Asset catalog 1x/2x/3x files match this
+// so UILaunchScreen does not treat a 1024px PNG as a 1024pt image.
+const SplashPointSize = 120
+
 func applyIOSIcons(iconRoot, assetsDir string) error {
 	src := filepath.Join(iconRoot, "source", "master.png")
 	img, err := icons.DecodeImage(src)
 	if err != nil {
 		return fmt.Errorf("ios app icon: %w", err)
 	}
-	square := icons.PadCenter(img)
-	mark := icons.Resize(icons.KnockoutBackground(square), 1024)
-	store := icons.FlattenOpaque(mark)
+	square := icons.KnockoutBackground(icons.PadCenter(img))
+	store := icons.FlattenOpaque(icons.Resize(square, 1024))
 	iconDir := filepath.Join(assetsDir, "AppIcon.appiconset")
 	if err := os.MkdirAll(iconDir, 0o755); err != nil {
 		return err
@@ -258,7 +262,19 @@ func applyIOSIcons(iconRoot, assetsDir string) error {
 	if err := os.MkdirAll(logoDir, 0o755); err != nil {
 		return err
 	}
-	return icons.WritePNG(filepath.Join(logoDir, "SplashLogo.png"), mark)
+	for _, scale := range []struct {
+		name string
+		px   int
+	}{
+		{"SplashLogo.png", SplashPointSize},
+		{"SplashLogo@2x.png", SplashPointSize * 2},
+		{"SplashLogo@3x.png", SplashPointSize * 3},
+	} {
+		if err := icons.WritePNG(filepath.Join(logoDir, scale.name), icons.Resize(square, scale.px)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func buildArchive(dest, goMainDir, workDir, sdk string, stamp version.Info, stdout, stderr io.Writer) error {
