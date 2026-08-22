@@ -72,6 +72,7 @@ go run ./cmd/eletrocromo --help
 go run ./cmd/eletrocromo version
 go run ./cmd/eletrocromo build icons          # → dist/icons (default mark or config icon)
 go run ./cmd/eletrocromo build android       # JIT APK; generates icons if missing
+go run ./cmd/eletrocromo build macos         # JIT unsigned Debug .app (Mac + Xcode)
 # or: mise run build:cli && ./bin/eletrocromo version
 ```
 
@@ -153,3 +154,28 @@ Icons are generated when missing (`--refresh-icons` to force). Legacy
 the service sets `ELETROCROMO_NO_UI=1` and loads the `ELETROCROMO_READY` URL in
 WebView. Packaging lives in `internal/apkgen/` + `internal/icons/` +
 `cmd/eletrocromo` (not in the core library import path for apps).
+
+### macOS `.app` (straight build)
+
+Same config and handshake as the APK. The host is a WKWebView shell, not Helium.
+Full `.app` needs **Xcode** and **xcodegen** on a Mac. Without them:
+
+```bash
+go run ./cmd/eletrocromo build macos \
+  --config examples/counter/eletrocromo.json \
+  --go-only \
+  --workdir dist/macos-counter
+```
+
+On a Mac with Xcode:
+
+```bash
+go run ./cmd/eletrocromo build macos \
+  --config examples/counter/eletrocromo.json \
+  --out dist/Counter.app
+
+mise run macos:counter
+```
+
+The `.app` is unsigned Debug. First open: right-click → Open. Off-loopback
+http(s) links open in the default browser. Packaging lives in `internal/macgen/`.

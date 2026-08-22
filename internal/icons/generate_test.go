@@ -105,6 +105,20 @@ func TestApplyAndroidRes(t *testing.T) {
 	}
 }
 
+func TestApplyMacOSICNS(t *testing.T) {
+	iconsDir := t.TempDir()
+	if _, err := Generate(Options{OutputDir: iconsDir, Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "Resources", "AppIcon.icns")
+	if err := ApplyMacOSICNS(iconsDir, dest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDefaultMarkEmbed(t *testing.T) {
 	if len(DefaultMarkPNG) < 100 {
 		t.Fatal("default mark embed empty")

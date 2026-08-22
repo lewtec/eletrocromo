@@ -4,6 +4,7 @@ go = "1.26.5"
 golangci-lint = "2.12.2"
 goreleaser = "2.17.0"
 svu = "3.3.0"
+xcodegen = "2.46.0"
 
 [tasks]
 "install:go" = "go mod download"
@@ -37,6 +38,18 @@ go run ./cmd/eletrocromo build android \
   --config examples/counter/eletrocromo.json \
   --go-only \
   --workdir dist/android-counter
+"""
+"macos:counter" = """
+go run ./cmd/eletrocromo build macos \
+  --config examples/counter/eletrocromo.json \
+  --out dist/Counter.app \
+  --workdir dist/macos-counter
+"""
+"macos:counter:go" = """
+go run ./cmd/eletrocromo build macos \
+  --config examples/counter/eletrocromo.json \
+  --go-only \
+  --workdir dist/macos-counter
 """
 "icons" = "go run ./cmd/eletrocromo build icons --refresh-icons"
 

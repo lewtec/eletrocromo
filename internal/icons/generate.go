@@ -16,8 +16,9 @@ import (
 
 // Sentinel errors for icon generation.
 var (
-	ErrSVGNotRasterized  = errors.New("svg masters are not rasterized in-process yet; pass a PNG/JPEG, or convert first (tool catalog TBD)")
+	ErrSVGNotRasterized    = errors.New("svg masters are not rasterized in-process yet; pass a PNG/JPEG, or convert first (tool catalog TBD)")
 	ErrAndroidIconsMissing = errors.New("android icons missing (run build icons)")
+	ErrMacOSIconMissing    = errors.New("macos icon.icns missing (run build icons)")
 )
 
 // Options drives Generate.
@@ -199,6 +200,19 @@ func ApplyAndroidRes(iconRoot, androidResDir string) error {
 		}
 	}
 	return nil
+}
+
+// ApplyMacOSICNS copies macos/icon.icns to destICNS (full file path).
+func ApplyMacOSICNS(iconRoot, destICNS string) error {
+	src := filepath.Join(iconRoot, "macos", "icon.icns")
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrMacOSIconMissing, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(destICNS), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(destICNS, raw, 0o644)
 }
 
 func readManifest(dir string) (*Manifest, error) {
