@@ -44,6 +44,9 @@ func TestBuild_GoOnly_Counter(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(work, "Assets.xcassets", "AppIcon.appiconset", "AppIcon.png")); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := os.Stat(filepath.Join(work, "Assets.xcassets", "SplashLogo.imageset", "SplashLogo.png")); err != nil {
+		t.Fatal(err)
+	}
 	if runtime.GOOS != "darwin" {
 		if res.ArchivePath != "" {
 			t.Fatalf("expected empty archive path off darwin, got %s", res.ArchivePath)

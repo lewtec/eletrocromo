@@ -94,6 +94,7 @@ func TestCreate_WritesHost(t *testing.T) {
 		"Sources/RootViewController.swift",
 		"Sources/eletrocromo-Bridging-Header.h",
 		"Assets.xcassets/AppIcon.appiconset/Contents.json",
+		"Assets.xcassets/SplashLogo.imageset/Contents.json",
 	}
 	for _, rel := range mustExist {
 		if _, err := os.Stat(filepath.Join(out, rel)); err != nil {
@@ -136,6 +137,9 @@ func TestCreate_WritesHost(t *testing.T) {
 	if !strings.Contains(ps, "LSRequiresIPhoneOS") {
 		t.Fatalf("plist iPhoneOS:\n%s", ps)
 	}
+	if !strings.Contains(ps, "SplashLogo") {
+		t.Fatalf("plist launch image:\n%s", ps)
+	}
 
 	jsonb, err := os.ReadFile(filepath.Join(out, "eletrocromo.json"))
 	if err != nil {
@@ -171,6 +175,15 @@ func TestCreate_WritesHost(t *testing.T) {
 	if !strings.Contains(us, "UIRefreshControl") {
 		t.Fatalf("pull-to-refresh missing:\n%s", us)
 	}
+	if !strings.Contains(us, "SplashLogo") {
+		t.Fatalf("splash logo missing:\n%s", us)
+	}
+	if !strings.Contains(us, "Try again") {
+		t.Fatalf("android retry copy missing:\n%s", us)
+	}
+	if !strings.Contains(us, "revealIfStuck") {
+		t.Fatalf("stuck reveal missing:\n%s", us)
+	}
 	if strings.Contains(us, "UIBarButtonItem") || strings.Contains(us, "arrow.clockwise") {
 		t.Fatalf("navbar reload still present:\n%s", us)
 	}
@@ -185,6 +198,9 @@ func TestCreate_WritesHost(t *testing.T) {
 	ds := string(delegate)
 	if strings.Contains(ds, "UINavigationController") {
 		t.Fatalf("nav controller still wrapping root:\n%s", ds)
+	}
+	if !strings.Contains(ds, "quietSplash") {
+		t.Fatalf("quiet splash missing:\n%s", ds)
 	}
 
 	hdr, err := os.ReadFile(filepath.Join(out, "Sources/eletrocromo-Bridging-Header.h"))

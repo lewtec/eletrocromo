@@ -7,11 +7,17 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
     private let webView: WKWebView
     private let refresh = UIRefreshControl()
     private let splash = UIView()
+    private let logo = UIImageView(image: UIImage(named: "SplashLogo"))
     private let statusLabel = UILabel()
     private let detailLabel = UILabel()
-    private let spinner = UIActivityIndicatorView(style: .large)
+    private let spinner = UIActivityIndicatorView(style: .medium)
     private let retryButton = UIButton(type: .system)
+    private let progressStack = UIStackView()
     private var appURL: URL?
+    private var lastStatus = "Starting local server…"
+    private var stuckWork: DispatchWorkItem?
+
+    private static let stuckAfter: TimeInterval = 3
 
     init() {
         let config = WKWebViewConfiguration()
@@ -43,16 +49,24 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
         splash.translatesAutoresizingMaskIntoConstraints = false
         splash.backgroundColor = .systemBackground
 
+        logo.translatesAutoresizingMaskIntoConstraints = false
+        logo.contentMode = .scaleAspectFit
+        logo.accessibilityLabel = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? "App"
+
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.textAlignment = .center
-        statusLabel.font = .preferredFont(forTextStyle: .headline)
+        statusLabel.font = .preferredFont(forTextStyle: .body)
+        statusLabel.textColor = .secondaryLabel
         statusLabel.adjustsFontForContentSizeCategory = true
-        statusLabel.text = "Starting…"
+        statusLabel.numberOfLines = 0
+        statusLabel.text = "Starting local server…"
 
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
         detailLabel.textAlignment = .center
         detailLabel.font = .preferredFont(forTextStyle: .footnote)
-        detailLabel.textColor = .secondaryLabel
+        detailLabel.textColor = .tertiaryLabel
         detailLabel.numberOfLines = 6
         detailLabel.adjustsFontForContentSizeCategory = true
         detailLabel.isHidden = true
@@ -60,17 +74,24 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
         spinner.translatesAutoresizingMaskIntoConstraints = false
 
         retryButton.translatesAutoresizingMaskIntoConstraints = false
-        retryButton.setTitle("Retry", for: .normal)
+        retryButton.setTitle("Try again", for: .normal)
         retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
         retryButton.isHidden = true
-        retryButton.accessibilityLabel = "Retry"
+        retryButton.accessibilityLabel = "Try again"
+
+        progressStack.axis = .vertical
+        progressStack.alignment = .center
+        progressStack.spacing = 16
+        progressStack.translatesAutoresizingMaskIntoConstraints = false
+        progressStack.isHidden = true
+        for v in [spinner, statusLabel, detailLabel, retryButton] {
+            progressStack.addArrangedSubview(v)
+        }
 
         view.addSubview(webView)
         view.addSubview(splash)
-        splash.addSubview(statusLabel)
-        splash.addSubview(detailLabel)
-        splash.addSubview(spinner)
-        splash.addSubview(retryButton)
+        splash.addSubview(logo)
+        splash.addSubview(progressStack)
 
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -81,46 +102,50 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
             splash.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             splash.topAnchor.constraint(equalTo: view.topAnchor),
             splash.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            statusLabel.centerXAnchor.constraint(equalTo: splash.centerXAnchor),
-            statusLabel.centerYAnchor.constraint(equalTo: splash.centerYAnchor, constant: -12),
-            statusLabel.leadingAnchor.constraint(greaterThanOrEqualTo: splash.leadingAnchor, constant: 24),
-            statusLabel.trailingAnchor.constraint(lessThanOrEqualTo: splash.trailingAnchor, constant: -24),
-            detailLabel.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
-            detailLabel.leadingAnchor.constraint(equalTo: splash.leadingAnchor, constant: 32),
-            detailLabel.trailingAnchor.constraint(equalTo: splash.trailingAnchor, constant: -32),
-            spinner.bottomAnchor.constraint(equalTo: statusLabel.topAnchor, constant: -16),
-            spinner.centerXAnchor.constraint(equalTo: splash.centerXAnchor),
-            retryButton.topAnchor.constraint(equalTo: detailLabel.bottomAnchor, constant: 16),
-            retryButton.centerXAnchor.constraint(equalTo: splash.centerXAnchor),
+            logo.centerXAnchor.constraint(equalTo: splash.centerXAnchor),
+            logo.centerYAnchor.constraint(equalTo: splash.centerYAnchor),
+            logo.widthAnchor.constraint(equalToConstant: 120),
+            logo.heightAnchor.constraint(equalToConstant: 120),
+            progressStack.topAnchor.constraint(equalTo: logo.bottomAnchor, constant: 24),
+            progressStack.leadingAnchor.constraint(equalTo: splash.leadingAnchor, constant: 32),
+            progressStack.trailingAnchor.constraint(equalTo: splash.trailingAnchor, constant: -32),
         ])
+
+        quietSplash()
     }
 
-    func showSplash(status: String, detail: String?, error: Bool) {
+    /// Logo only. Status + spinner stay hidden until we are stuck or fail.
+    func quietSplash() {
         endRefresh()
         splash.isHidden = false
         webView.isHidden = true
-        statusLabel.text = status
-        if let detail, !detail.isEmpty {
-            detailLabel.text = detail
-            detailLabel.isHidden = false
-        } else {
-            detailLabel.text = ""
-            detailLabel.isHidden = true
+        progressStack.isHidden = true
+        spinner.stopAnimating()
+        retryButton.isHidden = true
+        detailLabel.isHidden = true
+        scheduleStuckReveal()
+    }
+
+    func noteStatus(_ message: String) {
+        lastStatus = message
+        if !progressStack.isHidden {
+            statusLabel.text = message
         }
+    }
+
+    func showSplash(status: String, detail: String?, error: Bool) {
+        lastStatus = status
         if error {
-            spinner.stopAnimating()
-            spinner.isHidden = true
-            retryButton.isHidden = false
-        } else {
-            spinner.isHidden = false
-            spinner.startAnimating()
-            retryButton.isHidden = true
+            showFailed(status: status, detail: detail)
+            return
         }
+        noteStatus(status)
+        quietSplash()
     }
 
     func load(_ url: URL) {
         appURL = url
-        showSplash(status: "Loading…", detail: nil, error: false)
+        noteStatus("Loading app…")
         webView.load(URLRequest(url: url))
     }
 
@@ -146,20 +171,62 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
         }
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    private func scheduleStuckReveal() {
+        stuckWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.revealIfStuck()
+        }
+        stuckWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.stuckAfter, execute: work)
+    }
+
+    private func revealIfStuck() {
+        guard !splash.isHidden else { return }
+        progressStack.isHidden = false
+        statusLabel.isHidden = false
+        statusLabel.text = lastStatus
+        retryButton.isHidden = true
+        spinner.isHidden = false
+        spinner.startAnimating()
+    }
+
+    private func showFailed(status: String, detail: String?) {
+        stuckWork?.cancel()
+        endRefresh()
+        splash.isHidden = false
+        webView.isHidden = true
+        progressStack.isHidden = false
+        statusLabel.isHidden = false
+        statusLabel.text = status
+        if let detail, !detail.isEmpty {
+            detailLabel.text = detail
+            detailLabel.isHidden = false
+        } else {
+            detailLabel.text = ""
+            detailLabel.isHidden = true
+        }
+        spinner.stopAnimating()
+        spinner.isHidden = true
+        retryButton.isHidden = false
+    }
+
+    private func hideSplash() {
+        stuckWork?.cancel()
         splash.isHidden = true
         webView.isHidden = false
         endRefresh()
     }
 
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        hideSplash()
+    }
+
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        endRefresh()
-        showSplash(status: "Load failed", detail: error.localizedDescription, error: true)
+        showFailed(status: "Could not load the page", detail: error.localizedDescription)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        endRefresh()
-        showSplash(status: "Load failed", detail: error.localizedDescription, error: true)
+        showFailed(status: "Could not load the page", detail: error.localizedDescription)
     }
 
     func webView(
