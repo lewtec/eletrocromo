@@ -95,6 +95,7 @@ func TestCreate_WritesHost(t *testing.T) {
 		"Sources/eletrocromo-Bridging-Header.h",
 		"Assets.xcassets/AppIcon.appiconset/Contents.json",
 		"Assets.xcassets/SplashLogo.imageset/Contents.json",
+		"LaunchScreen.storyboard",
 	}
 	for _, rel := range mustExist {
 		if _, err := os.Stat(filepath.Join(out, rel)); err != nil {
@@ -122,6 +123,9 @@ func TestCreate_WritesHost(t *testing.T) {
 	if !strings.Contains(s, "ENABLE_DEBUG_DYLIB: NO") {
 		t.Fatalf("debug dylib not off:\n%s", s)
 	}
+	if !strings.Contains(s, "LaunchScreen.storyboard") {
+		t.Fatalf("launch storyboard missing from project:\n%s", s)
+	}
 
 	plist, err := os.ReadFile(filepath.Join(out, "Info.plist"))
 	if err != nil {
@@ -137,8 +141,20 @@ func TestCreate_WritesHost(t *testing.T) {
 	if !strings.Contains(ps, "LSRequiresIPhoneOS") {
 		t.Fatalf("plist iPhoneOS:\n%s", ps)
 	}
-	if !strings.Contains(ps, "SplashLogo") {
-		t.Fatalf("plist launch image:\n%s", ps)
+	if !strings.Contains(ps, "UILaunchStoryboardName") || !strings.Contains(ps, "LaunchScreen") {
+		t.Fatalf("plist launch storyboard:\n%s", ps)
+	}
+	if strings.Contains(ps, "UILaunchScreen") {
+		t.Fatalf("plist still uses UILaunchScreen (zooms 1x 1024px):\n%s", ps)
+	}
+
+	story, err := os.ReadFile(filepath.Join(out, "LaunchScreen.storyboard"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ssb := string(story)
+	if !strings.Contains(ssb, `constant="120"`) || !strings.Contains(ssb, "SplashLogo") {
+		t.Fatalf("launch storyboard logo size:\n%s", ssb)
 	}
 
 	jsonb, err := os.ReadFile(filepath.Join(out, "eletrocromo.json"))

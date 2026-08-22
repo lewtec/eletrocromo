@@ -104,7 +104,7 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
             splash.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             logo.centerXAnchor.constraint(equalTo: splash.centerXAnchor),
             logo.centerYAnchor.constraint(equalTo: splash.centerYAnchor),
-            logo.widthAnchor.constraint(equalToConstant: 120),
+            logo.widthAnchor.constraint(equalToConstant: 120), // keep in sync with LaunchScreen.storyboard
             logo.heightAnchor.constraint(equalToConstant: 120),
             progressStack.topAnchor.constraint(equalTo: logo.bottomAnchor, constant: 24),
             progressStack.leadingAnchor.constraint(equalTo: splash.leadingAnchor, constant: 32),
