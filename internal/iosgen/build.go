@@ -134,12 +134,12 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		}
 		iconRoot = tmpIcons
 	}
-	iconDest := filepath.Join(workDir, "Assets.xcassets", "AppIcon.appiconset")
+	assetsDir := filepath.Join(workDir, "Assets.xcassets")
 	if _, err := fmt.Fprintf(stdout, "eletrocromo: applying iOS icon from %s\n", iconRoot); err != nil {
 		buildErr = err
 		return nil, buildErr
 	}
-	if err := applyAppIcon(iconRoot, iconDest); err != nil {
+	if err := applyIOSIcons(iconRoot, assetsDir); err != nil {
 		buildErr = err
 		return nil, buildErr
 	}
@@ -238,18 +238,27 @@ func resolveWorkDir(opts BuildOptions) (workDir string, cleanup bool, err error)
 	return dir, true, nil
 }
 
-func applyAppIcon(iconRoot, destDir string) error {
+func applyIOSIcons(iconRoot, assetsDir string) error {
 	src := filepath.Join(iconRoot, "source", "master.png")
 	img, err := icons.DecodeImage(src)
 	if err != nil {
 		return fmt.Errorf("ios app icon: %w", err)
 	}
 	square := icons.PadCenter(img)
-	out := icons.FlattenOpaque(icons.Resize(square, 1024))
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	mark := icons.Resize(icons.KnockoutBackground(square), 1024)
+	store := icons.FlattenOpaque(mark)
+	iconDir := filepath.Join(assetsDir, "AppIcon.appiconset")
+	if err := os.MkdirAll(iconDir, 0o755); err != nil {
 		return err
 	}
-	return icons.WritePNG(filepath.Join(destDir, "AppIcon.png"), out)
+	if err := icons.WritePNG(filepath.Join(iconDir, "AppIcon.png"), store); err != nil {
+		return err
+	}
+	logoDir := filepath.Join(assetsDir, "SplashLogo.imageset")
+	if err := os.MkdirAll(logoDir, 0o755); err != nil {
+		return err
+	}
+	return icons.WritePNG(filepath.Join(logoDir, "SplashLogo.png"), mark)
 }
 
 func buildArchive(dest, goMainDir, workDir, sdk string, stamp version.Info, stdout, stderr io.Writer) error {

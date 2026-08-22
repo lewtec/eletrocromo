@@ -46,7 +46,7 @@ final class ServerProcess {
             .appendingPathComponent("eletrocromo-ready-\(UUID().uuidString).url")
         try? FileManager.default.removeItem(at: readyFile)
 
-        status("Binding loopback…")
+        status("Waiting for server…")
         DispatchQueue.global(qos: .userInitiated).async {
             readyFile.path.withCString { ptr in
                 EletrocromoStart(UnsafeMutablePointer(mutating: ptr))

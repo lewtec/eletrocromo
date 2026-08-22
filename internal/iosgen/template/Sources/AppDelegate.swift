@@ -28,16 +28,16 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     private func startServer() {
-        root?.showSplash(status: "Starting server…", detail: nil, error: false)
+        root?.quietSplash()
         server.start(
             onStatus: { [weak self] message in
-                self?.root?.showSplash(status: message, detail: nil, error: false)
+                self?.root?.noteStatus(message)
             },
             onReady: { [weak self] url in
                 self?.root?.load(url)
             },
             onFailed: { [weak self] message in
-                self?.root?.showSplash(status: "Server failed", detail: message, error: true)
+                self?.root?.showSplash(status: "Could not start the app", detail: message, error: true)
             }
         )
     }
