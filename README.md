@@ -97,8 +97,9 @@ Wire paths into GoReleaser yourself (`before.hooks`, Pro `app_bundles.icon`, nFP
 
 ### Release
 
-Self-contained binaries (`CGO_ENABLED=0`) via [GoReleaser](https://goreleaser.com/)
-on GitHub Actions (push/`schedule` to `main`, or `workflow_dispatch`):
+Self-contained binaries (`CGO_ENABLED=0`) via [GoReleaser](https://goreleaser.com/).
+GitHub Releases only from **Actions → Autorelease → Run workflow** (`workflow_dispatch`).
+Push/`schedule` on `main` run CI only.
 
 ```bash
 # local (needs GITHUB_TOKEN + push rights):
