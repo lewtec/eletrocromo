@@ -1,9 +1,9 @@
-// Package apkgen generates ad-hoc Android WebView host projects from an
+// Package apk generates ad-hoc Android WebView host projects from an
 // embedded template (PhoneGap/Expo-style), keyed by reverse-domain package ID.
 //
 // The core eletrocromo library stays free of the Android SDK; this package only
 // writes a Gradle/Kotlin tree that runs a multiarch Go binary and opens WebView.
-package apkgen
+package apk
 
 import (
 	"bytes"

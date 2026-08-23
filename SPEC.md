@@ -553,7 +553,6 @@ Resolved by engineering when building, not by re-litigating product meaning:
 - Ephemeral project shape (XcodeGen `project.yml` vs checked-in template xcodeproj)
 - How host arch is detected (`runtime.GOARCH` vs `uname`)
 - Exact Info.plist ATS keys and splash asset (app icns vs default mark)
-- Internal package name for the macos generator (`macgen` / `appgen` / …)
 
 ---
 

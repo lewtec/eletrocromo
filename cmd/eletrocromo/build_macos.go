@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lewtec/eletrocromo/internal/gen/mac"
 	"github.com/lewtec/eletrocromo/internal/icons"
-	"github.com/lewtec/eletrocromo/internal/macgen"
 	"github.com/lucasew/workspaced/pkg/logging"
 	"github.com/lucasew/workspaced/pkg/taskgroup"
 	"github.com/spf13/cobra"
@@ -70,7 +70,7 @@ Example (from examples/counter):
 			iconSrc := resolveIconSource(cwd, iconPath, baseDir, apkCfg.Icon)
 			iconOut := resolveIconOutput(cwd, iconOutput)
 
-			cfg := macgen.Config{
+			cfg := mac.Config{
 				PackageID:   apkCfg.PackageID,
 				AppName:     apkCfg.AppName,
 				VersionName: apkCfg.VersionName,
@@ -86,7 +86,7 @@ Example (from examples/counter):
 					parts := strings.Split(cfg.PackageID, ".")
 					appName = parts[len(parts)-1]
 				}
-				outApp = macgen.DefaultOutApp(appName, cwd)
+				outApp = mac.DefaultOutApp(appName, cwd)
 			}
 
 			ctx := logging.NewWriterContext(cmd.ErrOrStderr())
@@ -117,7 +117,7 @@ Example (from examples/counter):
 			})
 
 			g.Go("macos", taskgroup.IO, func(ctx context.Context, s *taskgroup.Status) error {
-				result, err := macgen.Build(macgen.BuildOptions{
+				result, err := mac.Build(mac.BuildOptions{
 					Config:      cfg,
 					BaseDir:     baseDir,
 					WorkDir:     workDir,

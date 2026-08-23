@@ -1,4 +1,4 @@
-package iosgen
+package mac
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	"text/template"
 )
 
-//go:embed all:template clangwrap.sh
+//go:embed all:template
 var templateFS embed.FS
 
 // Options controls Create.
@@ -31,7 +31,7 @@ type templateData struct {
 	CodeString string
 }
 
-// Create writes an ephemeral XcodeGen iOS host under opts.OutDir.
+// Create writes an ephemeral XcodeGen host under opts.OutDir.
 func Create(opts Options) error {
 	cfg, err := opts.Config.withDefaults()
 	if err != nil {

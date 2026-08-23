@@ -1,4 +1,4 @@
-package macgen
+package mac
 
 import (
 	"os"

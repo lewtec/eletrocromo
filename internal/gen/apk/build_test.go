@@ -1,4 +1,4 @@
-package apkgen
+package apk
 
 import (
 	"bytes"

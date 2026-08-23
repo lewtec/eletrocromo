@@ -1,6 +1,7 @@
-package macgen
+package ios
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,14 +18,20 @@ import (
 // Build / toolchain sentinels.
 var (
 	ErrOutAppRequired     = errors.New("out .app path is required (or use --go-only)")
-	ErrMacOSRequired      = errors.New("full .app requires macOS with Xcode; use --go-only")
+	ErrDarwinRequired     = errors.New("ios archive and .app require macOS with Xcode; use --go-only on a Mac")
 	ErrXcodebuildNotFound = errors.New("xcodebuild not found; install Xcode")
 	ErrXcodeGenNotFound   = errors.New("xcodegen not found; install xcodegen (mise/brew)")
-	ErrDebugAppMissing    = errors.New("xcodebuild succeeded but no Debug .app under DerivedData")
-	ErrUnsupportedGOARCH  = errors.New("unsupported host GOARCH for darwin")
+	ErrDebugAppMissing    = errors.New("xcodebuild succeeded but no Debug-iphonesimulator .app under DerivedData")
+	ErrUnknownSDK         = errors.New("sdk must be iphonesimulator or iphoneos")
 )
 
-// BuildOptions drives a macos .app build from an eletrocromo app.
+// SDKSimulator / SDKDevice are xcrun SDK names.
+const (
+	SDKSimulator = "iphonesimulator"
+	SDKDevice    = "iphoneos"
+)
+
+// BuildOptions drives an iOS .app build from an eletrocromo app.
 type BuildOptions struct {
 	Config      Config
 	BaseDir     string
@@ -32,6 +39,7 @@ type BuildOptions struct {
 	KeepWorkDir bool
 	OutApp      string
 	GoOnly      bool
+	SDK         string
 	IconRoot    string
 	Stdout      io.Writer
 	Stderr      io.Writer
@@ -39,12 +47,12 @@ type BuildOptions struct {
 
 // BuildResult is the outcome of Build.
 type BuildResult struct {
-	AppPath    string
-	WorkDir    string
-	HelperPath string
+	AppPath     string
+	WorkDir     string
+	ArchivePath string
 }
 
-// Build scaffolds the Mac host, cross-compiles the Go helper, and (unless
+// Build scaffolds the iOS host, builds a GOOS=ios c-archive, and (unless
 // GoOnly) runs xcodegen + xcodebuild Debug and copies the .app to OutApp.
 func Build(opts BuildOptions) (*BuildResult, error) {
 	stdout := opts.Stdout
@@ -72,6 +80,11 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, err
 	}
 
+	sdk, err := normalizeSDK(opts.SDK)
+	if err != nil {
+		return nil, err
+	}
+
 	vi := version.ResolveDir(goMain)
 	if strings.TrimSpace(opts.Config.VersionName) == "" {
 		cfg.VersionName = vi.AndroidName()
@@ -84,7 +97,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	}
 
 	if !opts.GoOnly && runtime.GOOS != "darwin" {
-		return nil, ErrMacOSRequired
+		return nil, ErrDarwinRequired
 	}
 
 	workDir, ephemeral, err := resolveWorkDir(opts)
@@ -103,7 +116,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	genCfg := cfg
 	genCfg.GoMain = goMain
 
-	if _, err := fmt.Fprintf(stdout, "eletrocromo: generating macOS host in %s\n", workDir); err != nil {
+	if _, err := fmt.Fprintf(stdout, "eletrocromo: generating iOS host in %s\n", workDir); err != nil {
 		buildErr = err
 		return nil, buildErr
 	}
@@ -121,34 +134,38 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		}
 		iconRoot = tmpIcons
 	}
-	icnsDest := filepath.Join(workDir, "Resources", "AppIcon.icns")
-	if _, err := fmt.Fprintf(stdout, "eletrocromo: applying macos icon from %s\n", iconRoot); err != nil {
+	assetsDir := filepath.Join(workDir, "Assets.xcassets")
+	if _, err := fmt.Fprintf(stdout, "eletrocromo: applying iOS icon from %s\n", iconRoot); err != nil {
 		buildErr = err
 		return nil, buildErr
 	}
-	if err := icons.ApplyMacOSICNS(iconRoot, icnsDest); err != nil {
-		buildErr = err
-		return nil, buildErr
-	}
-
-	arch, xArch, err := hostDarwinArch()
-	if err != nil {
-		buildErr = err
-		return nil, buildErr
-	}
-	helperDest := filepath.Join(workDir, "bin", HelperName)
-	if _, err := fmt.Fprintf(stdout, "eletrocromo: building Go helper (GOOS=darwin GOARCH=%s)\n", arch); err != nil {
-		buildErr = err
-		return nil, buildErr
-	}
-	if err := buildGoHelper(helperDest, goMain, arch, vi, stdout, stderr); err != nil {
+	if err := applyIOSIcons(iconRoot, assetsDir); err != nil {
 		buildErr = err
 		return nil, buildErr
 	}
 
-	result := &BuildResult{WorkDir: workDir, HelperPath: helperDest}
+	archiveDest := filepath.Join(workDir, "lib", ArchiveName+".a")
+	result := &BuildResult{WorkDir: workDir}
+
+	if runtime.GOOS != "darwin" {
+		if _, err := fmt.Fprintf(stdout, "eletrocromo: --go-only: skipped ios c-archive (need macOS + Xcode)\n"); err != nil {
+			return result, err
+		}
+		return result, nil
+	}
+
+	if _, err := fmt.Fprintf(stdout, "eletrocromo: building Go c-archive (GOOS=ios SDK=%s)\n", sdk); err != nil {
+		buildErr = err
+		return nil, buildErr
+	}
+	if err := buildArchive(archiveDest, goMain, workDir, sdk, vi, stdout, stderr); err != nil {
+		buildErr = err
+		return nil, buildErr
+	}
+	result.ArchivePath = archiveDest
+
 	if opts.GoOnly {
-		_, err := fmt.Fprintf(stdout, "eletrocromo: --go-only: skipped xcodebuild (helper %s)\n", helperDest)
+		_, err := fmt.Fprintf(stdout, "eletrocromo: --go-only: skipped xcodebuild (archive %s)\n", archiveDest)
 		return result, err
 	}
 
@@ -167,16 +184,8 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		buildErr = err
 		return nil, buildErr
 	}
-	built, err := assembleDebug(workDir, cfg.ProductName(), xArch, stdout, stderr)
+	built, err := assembleDebug(workDir, cfg.ProductName(), sdk, stdout, stderr)
 	if err != nil {
-		buildErr = err
-		return nil, buildErr
-	}
-	if err := installHelper(built, helperDest); err != nil {
-		buildErr = err
-		return nil, buildErr
-	}
-	if err := installICNS(built, icnsDest); err != nil {
 		buildErr = err
 		return nil, buildErr
 	}
@@ -193,6 +202,24 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	return result, err
 }
 
+func normalizeSDK(sdk string) (string, error) {
+	s := strings.TrimSpace(sdk)
+	if s == "" {
+		return SDKSimulator, nil
+	}
+	switch s {
+	case SDKSimulator, SDKDevice, "simulator":
+		if s == "simulator" {
+			return SDKSimulator, nil
+		}
+		return s, nil
+	case "device":
+		return SDKDevice, nil
+	default:
+		return "", fmt.Errorf("%w: %s", ErrUnknownSDK, s)
+	}
+}
+
 func resolveWorkDir(opts BuildOptions) (workDir string, cleanup bool, err error) {
 	if strings.TrimSpace(opts.WorkDir) != "" {
 		abs, err := filepath.Abs(opts.WorkDir)
@@ -204,44 +231,122 @@ func resolveWorkDir(opts BuildOptions) (workDir string, cleanup bool, err error)
 		}
 		return abs, false, nil
 	}
-	dir, err := os.MkdirTemp("", "eletrocromo-macos-*")
+	dir, err := os.MkdirTemp("", "eletrocromo-ios-*")
 	if err != nil {
 		return "", false, err
 	}
 	return dir, true, nil
 }
 
-func hostDarwinArch() (goarch, xcodeArch string, err error) {
-	switch runtime.GOARCH {
-	case "arm64":
-		return "arm64", "arm64", nil
-	case "amd64":
-		return "amd64", "x86_64", nil
-	default:
-		return "", "", fmt.Errorf("%w: %s", ErrUnsupportedGOARCH, runtime.GOARCH)
+// SplashPointSize is the on-screen logo size (points) for the launch
+// storyboard and the in-app splash. Asset catalog 1x/2x/3x files match this
+// so UILaunchScreen does not treat a 1024px PNG as a 1024pt image.
+const SplashPointSize = 120
+
+func applyIOSIcons(iconRoot, assetsDir string) error {
+	src := filepath.Join(iconRoot, "source", "master.png")
+	img, err := icons.DecodeImage(src)
+	if err != nil {
+		return fmt.Errorf("ios app icon: %w", err)
 	}
+	square := icons.KnockoutBackground(icons.PadCenter(img))
+	store := icons.FlattenOpaque(icons.Resize(square, 1024))
+	iconDir := filepath.Join(assetsDir, "AppIcon.appiconset")
+	if err := os.MkdirAll(iconDir, 0o755); err != nil {
+		return err
+	}
+	if err := icons.WritePNG(filepath.Join(iconDir, "AppIcon.png"), store); err != nil {
+		return err
+	}
+	logoDir := filepath.Join(assetsDir, "SplashLogo.imageset")
+	if err := os.MkdirAll(logoDir, 0o755); err != nil {
+		return err
+	}
+	for _, scale := range []struct {
+		name string
+		px   int
+	}{
+		{"SplashLogo.png", SplashPointSize},
+		{"SplashLogo@2x.png", SplashPointSize * 2},
+		{"SplashLogo@3x.png", SplashPointSize * 3},
+	} {
+		if err := icons.WritePNG(filepath.Join(logoDir, scale.name), icons.Resize(square, scale.px)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func buildGoHelper(dest, goMainDir, goarch string, stamp version.Info, stdout, stderr io.Writer) error {
+func buildArchive(dest, goMainDir, workDir, sdk string, stamp version.Info, stdout, stderr io.Writer) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
-	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", stamp.GoBuildLdflags(), "-o", dest, ".")
+	bridgePath := filepath.Join(workDir, BridgeGoName)
+	if err := os.WriteFile(bridgePath, []byte(iosBridgeSource), 0o644); err != nil {
+		return err
+	}
+	virtual := filepath.Join(goMainDir, BridgeGoName)
+	overlayDoc := map[string]map[string]string{
+		"Replace": {virtual: bridgePath},
+	}
+	overlayRaw, err := json.Marshal(overlayDoc)
+	if err != nil {
+		return err
+	}
+	overlayFile := filepath.Join(workDir, "overlay.json")
+	if err := os.WriteFile(overlayFile, overlayRaw, 0o644); err != nil {
+		return err
+	}
+
+	wrap, err := writeClangwrap(workDir)
+	if err != nil {
+		return err
+	}
+
+	goarch, _ := hostIOSArch(sdk)
+
+	cmd := exec.Command("go", "build",
+		"-buildmode=c-archive",
+		"-trimpath",
+		"-overlay", overlayFile,
+		"-ldflags", stamp.GoBuildLdflags(),
+		"-o", dest,
+		".",
+	)
 	cmd.Dir = goMainDir
 	cmd.Env = append(os.Environ(),
-		"CGO_ENABLED=0",
-		"GOOS=darwin",
+		"CGO_ENABLED=1",
+		"GOOS=ios",
 		"GOARCH="+goarch,
+		"CC="+wrap,
+		"ELETROCROMO_IOS_SDK="+sdk,
+		"CGO_LDFLAGS=-framework CoreFoundation",
 	)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("go build darwin/%s: %w", goarch, err)
+		return fmt.Errorf("go build ios/%s (%s): %w", goarch, sdk, err)
 	}
-	return os.Chmod(dest, 0o755)
+	hdr := strings.TrimSuffix(dest, ".a") + ".h"
+	if _, err := os.Stat(hdr); err != nil {
+		return fmt.Errorf("c-archive header: %w", err)
+	}
+	return nil
 }
 
-func assembleDebug(workDir, product, xArch string, stdout, stderr io.Writer) (string, error) {
+func writeClangwrap(workDir string) (string, error) {
+	raw, err := templateFS.ReadFile("clangwrap.sh")
+	if err != nil {
+		return "", err
+	}
+	dest := filepath.Join(workDir, "clangwrap.sh")
+	if err := os.WriteFile(dest, raw, 0o755); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+func assembleDebug(workDir, product, sdk string, stdout, stderr io.Writer) (string, error) {
 	if _, err := exec.LookPath("xcodegen"); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrXcodeGenNotFound, err)
 	}
@@ -257,21 +362,25 @@ func assembleDebug(workDir, product, xArch string, stdout, stderr io.Writer) (st
 		return "", fmt.Errorf("xcodegen generate: %w", err)
 	}
 
+	dest, destName := xcodeDestination(sdk)
+	_, xArch := hostIOSArch(sdk)
 	derived := filepath.Join(workDir, "build", "DerivedData")
 	proj := filepath.Join(workDir, product+".xcodeproj")
 	cmd := exec.Command("xcodebuild",
 		"-project", proj,
 		"-scheme", product,
 		"-configuration", "Debug",
-		"-destination", "platform=macOS,arch="+xArch,
+		"-sdk", sdk,
+		"-destination", dest,
 		"-derivedDataPath", derived,
 		"-skipPackagePluginValidation",
 		"CODE_SIGN_IDENTITY=-",
 		"CODE_SIGNING_REQUIRED=NO",
-		"ENABLE_APP_SANDBOX=NO",
+		"CODE_SIGNING_ALLOWED=NO",
 		"ENABLE_DEBUG_DYLIB=NO",
 		"ARCHS="+xArch,
 		"ONLY_ACTIVE_ARCH=YES",
+		"EXCLUDED_ARCHS="+excludedArch(xArch),
 		"build",
 	)
 	cmd.Dir = workDir
@@ -281,55 +390,32 @@ func assembleDebug(workDir, product, xArch string, stdout, stderr io.Writer) (st
 		return "", fmt.Errorf("xcodebuild: %w\n(work dir left at %s)", err, workDir)
 	}
 
-	app := filepath.Join(derived, "Build", "Products", "Debug", product+".app")
+	app := filepath.Join(derived, "Build", "Products", destName, product+".app")
 	if st, err := os.Stat(app); err != nil || !st.IsDir() {
 		return "", fmt.Errorf("%w: %s", ErrDebugAppMissing, app)
 	}
 	return app, nil
 }
 
-func installHelper(appPath, helper string) error {
-	dest := filepath.Join(appPath, "Contents", "MacOS", HelperName)
-	if err := copyFile(helper, dest); err != nil {
-		return fmt.Errorf("install helper: %w", err)
+func hostIOSArch(sdk string) (goarch, xArch string) {
+	if runtime.GOARCH == "amd64" && sdk == SDKSimulator {
+		return "amd64", "x86_64"
 	}
-	return os.Chmod(dest, 0o755)
+	return "arm64", "arm64"
 }
 
-func installICNS(appPath, icns string) error {
-	dest := filepath.Join(appPath, "Contents", "Resources", "AppIcon.icns")
-	if err := copyFile(icns, dest); err != nil {
-		return fmt.Errorf("install icns: %w", err)
+func excludedArch(xArch string) string {
+	if xArch == "arm64" {
+		return "x86_64"
 	}
-	return resignApp(appPath)
+	return "arm64"
 }
 
-func resignApp(appPath string) error {
-	// Re-sign after adding the Go child and icon (ad-hoc, like rterm).
-	if _, err := exec.LookPath("codesign"); err != nil {
-		return nil
+func xcodeDestination(sdk string) (destination, productsDir string) {
+	if sdk == SDKDevice {
+		return "generic/platform=iOS", "Debug-iphoneos"
 	}
-	cmd := exec.Command("codesign", "--force", "--deep", "--sign", "-", appPath)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("codesign: %w (%s)", err, strings.TrimSpace(string(out)))
-	}
-	return nil
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return errors.Join(err, in.Close())
-	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
-	if err != nil {
-		return errors.Join(err, in.Close())
-	}
-	_, copyErr := io.Copy(out, in)
-	return errors.Join(copyErr, out.Close(), in.Close())
+	return "generic/platform=iOS Simulator", "Debug-iphonesimulator"
 }
 
 func replaceDir(src, dst string) error {
@@ -339,7 +425,6 @@ func replaceDir(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	// Rename when same device; fall back to recursive copy.
 	if err := os.Rename(src, dst); err == nil {
 		return nil
 	}

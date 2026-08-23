@@ -1,4 +1,4 @@
-package iosgen
+package ios
 
 import (
 	"os"

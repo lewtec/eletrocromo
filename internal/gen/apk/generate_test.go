@@ -1,12 +1,12 @@
-package apkgen
+package apk
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"errors"
-	"io/fs"
 )
 
 func TestCreate_PackageIDLayout(t *testing.T) {
