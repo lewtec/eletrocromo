@@ -42,6 +42,15 @@ type Manifest struct {
 // DefaultOutputDir is the SPEC default tree root name.
 const DefaultOutputDir = "dist/icons"
 
+// defaultMaster crops the square mark from the vendored lockup.
+func defaultMaster() (image.Image, error) {
+	img, err := DecodeBytes(DefaultLockupPNG, "default/lockup.png")
+	if err != nil {
+		return nil, fmt.Errorf("default lockup: %w", err)
+	}
+	return Resize(ExtractUpperMark(KnockoutBackground(img)), 1024), nil
+}
+
 // Generate writes a full icon matrix under opts.OutputDir.
 // If the tree is already Complete and !Force, it is a no-op.
 func Generate(opts Options) (*Manifest, error) {
@@ -75,9 +84,9 @@ func Generate(opts Options) (*Manifest, error) {
 			return nil, ErrSVGNotRasterized
 		}
 	} else {
-		img, err = DecodeBytes(DefaultMarkPNG, "default/mark.png")
+		img, err = defaultMaster()
 		if err != nil {
-			return nil, fmt.Errorf("default mark: %w", err)
+			return nil, err
 		}
 	}
 

@@ -104,30 +104,189 @@ func KnockoutBackground(src image.Image) *image.NRGBA {
 
 	const hard, soft = 28.0, 58.0
 	hs, ss := hard*hard, soft*soft
+	canvasDist := func(x, y int) (float64, int, int, int, int, bool) {
+		r16, g16, b16, a16 := src.At(x, y).RGBA()
+		r, g, bl, a := int(r16>>8), int(g16>>8), int(b16>>8), int(a16>>8)
+		if a < 8 {
+			return 0, r, g, bl, a, false
+		}
+		dr, dg, db := float64(r-cr), float64(g-cg), float64(bl-cb)
+		d := dr*dr + dg*dg + db*db
+		return d, r, g, bl, a, d < ss
+	}
+
+	// Only the canvas connected to the border. Interior highlights stay.
+	w, h := b.Dx(), b.Dy()
+	reach := make([]bool, w*h)
+	idx := func(x, y int) int { return (x-b.Min.X) + (y-b.Min.Y)*w }
+	q := make([]int, 0, w+h)
+	push := func(x, y int) {
+		if x < b.Min.X || y < b.Min.Y || x >= b.Max.X || y >= b.Max.Y {
+			return
+		}
+		i := idx(x, y)
+		if reach[i] {
+			return
+		}
+		if _, _, _, _, _, ok := canvasDist(x, y); !ok {
+			return
+		}
+		reach[i] = true
+		q = append(q, i)
+	}
+	for x := b.Min.X; x < b.Max.X; x++ {
+		push(x, b.Min.Y)
+		push(x, b.Max.Y-1)
+	}
+	for y := b.Min.Y + 1; y < b.Max.Y-1; y++ {
+		push(b.Min.X, y)
+		push(b.Max.X-1, y)
+	}
+	for len(q) > 0 {
+		i := q[0]
+		q = q[1:]
+		x := b.Min.X + i%w
+		y := b.Min.Y + i/w
+		for _, dxy := range [8][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}} {
+			push(x+dxy[0], y+dxy[1])
+		}
+	}
+
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
-			r16, g16, b16, a16 := src.At(x, y).RGBA()
-			r, g, bl, a := int(r16>>8), int(g16>>8), int(b16>>8), int(a16>>8)
-			dr, dg, db := float64(r-cr), float64(g-cg), float64(bl-cb)
-			d := dr*dr + dg*dg + db*db
+			d, r, g, bl, a, _ := canvasDist(x, y)
+			ox, oy := x-b.Min.X, y-b.Min.Y
+			if !reach[idx(x, y)] {
+				r16, g16, b16, a16 := src.At(x, y).RGBA()
+				dst.SetNRGBA(ox, oy, color.NRGBA{R: uint8(r16 >> 8), G: uint8(g16 >> 8), B: uint8(b16 >> 8), A: uint8(a16 >> 8)})
+				continue
+			}
 			var alpha uint8
 			switch {
 			case d <= hs:
 				alpha = 0
-			case d >= ss:
-				alpha = uint8(a)
 			default:
 				t := (d - hs) / (ss - hs)
 				alpha = uint8(float64(a) * t)
 			}
 			if alpha == 0 {
-				dst.SetNRGBA(x-b.Min.X, y-b.Min.Y, color.NRGBA{})
+				dst.SetNRGBA(ox, oy, color.NRGBA{})
 			} else {
-				dst.SetNRGBA(x-b.Min.X, y-b.Min.Y, color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(bl), A: alpha})
+				dst.SetNRGBA(ox, oy, color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(bl), A: alpha})
 			}
 		}
 	}
 	return dst
+}
+
+// ContentBounds is the smallest rectangle covering pixels with alpha > minA
+// (8-bit). If none qualify, it returns src.Bounds().
+func ContentBounds(src image.Image, minA uint8) image.Rectangle {
+	b := src.Bounds()
+	minX, minY := b.Max.X, b.Max.Y
+	maxX, maxY := b.Min.X, b.Min.Y
+	found := false
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			_, _, _, a := src.At(x, y).RGBA()
+			if uint8(a>>8) <= minA {
+				continue
+			}
+			found = true
+			if x < minX {
+				minX = x
+			}
+			if y < minY {
+				minY = y
+			}
+			if x+1 > maxX {
+				maxX = x + 1
+			}
+			if y+1 > maxY {
+				maxY = y + 1
+			}
+		}
+	}
+	if !found {
+		return b
+	}
+	return image.Rect(minX, minY, maxX, maxY)
+}
+
+// cropTo copies r (intersected with src) into a 0,0-origin NRGBA.
+func cropTo(src image.Image, r image.Rectangle) *image.NRGBA {
+	r = r.Intersect(src.Bounds())
+	dst := image.NewNRGBA(image.Rect(0, 0, r.Dx(), r.Dy()))
+	if r.Empty() {
+		return dst
+	}
+	draw.Draw(dst, dst.Bounds(), src, r.Min, draw.Src)
+	return dst
+}
+
+// TrimTransparent crops to ContentBounds plus padFrac of the longer side,
+// clipped to src. padFrac <= 0 means no extra padding.
+func TrimTransparent(src image.Image, padFrac float64) *image.NRGBA {
+	box := ContentBounds(src, 8)
+	if padFrac > 0 {
+		pad := int(float64(max(box.Dx(), box.Dy())) * padFrac)
+		box = box.Inset(-pad)
+	}
+	return cropTo(src, box)
+}
+
+// largestEmptyRowRun returns the [start,end) empty-row span inside box with
+// the most rows. ok is false when no empty row exists.
+func largestEmptyRowRun(src image.Image, box image.Rectangle, minA uint8) (start, end int, ok bool) {
+	best0, best1 := 0, 0
+	run0 := -1
+	for y := box.Min.Y; y < box.Max.Y; y++ {
+		empty := true
+		for x := box.Min.X; x < box.Max.X; x++ {
+			_, _, _, a := src.At(x, y).RGBA()
+			if uint8(a>>8) > minA {
+				empty = false
+				break
+			}
+		}
+		if empty {
+			if run0 < 0 {
+				run0 = y
+			}
+			continue
+		}
+		if run0 >= 0 && y-run0 > best1-best0 {
+			best0, best1 = run0, y
+		}
+		run0 = -1
+	}
+	if run0 >= 0 && box.Max.Y-run0 > best1-best0 {
+		best0, best1 = run0, box.Max.Y
+	}
+	if best1 <= best0 {
+		return 0, 0, false
+	}
+	return best0, best1, true
+}
+
+// ExtractUpperMark crops the symbol above the largest transparent horizontal
+// gap (lockup wordmark sits below). With no gap it uses the full content box.
+// The result is a padded square.
+func ExtractUpperMark(src image.Image) *image.NRGBA {
+	const minA uint8 = 8
+	box := ContentBounds(src, minA)
+	mark := box
+	if g0, g1, ok := largestEmptyRowRun(src, box, minA); ok {
+		// Ignore hairline gaps; a lockup gap is a real band of empty rows.
+		if g1-g0 >= max(8, box.Dy()/20) && g0 > box.Min.Y {
+			mark.Max.Y = g0
+		}
+	}
+	// Recompute x so leftover wordmark-width padding is not kept.
+	mark = ContentBounds(cropTo(src, mark), minA).Add(mark.Min)
+	const padFrac = 0.08
+	pad := int(float64(max(mark.Dx(), mark.Dy())) * padFrac)
+	return PadCenter(cropTo(src, mark.Inset(-pad)))
 }
 
 // Resize returns a size×size NRGBA using CatmullRom.

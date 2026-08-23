@@ -275,7 +275,7 @@ v1 **desktop library** is **complete** when all of the following hold:
 
 Separate from desktop tray/lifetime. Complete when:
 
-1. **Default assets:** vendored square **mark** + **lockup** in-repo; generator never depends on ephemeral paths.
+1. **Default assets:** vendored **lockup** (RGBA, no canvas) in-repo; square **mark** is cropped from it at generate time; generator never depends on ephemeral paths.
 2. **`eletrocromo build`:** bare invocation errors and lists targets.
 3. **`build icons`:** one master (config/`--icon`/default) → full `dist/icons` tree + `manifest.json`; pad+center; `--output`; `--refresh-icons`.
 4. **`build android`:** JIT scaffold + multiarch Go + APK; runs icons when outputs missing (or `--refresh-icons`); mipmaps applied in workdir.
@@ -342,7 +342,7 @@ Product decision for **apps built with eletrocromo**, not primarily for branding
 
 ### Product goals
 
-- Ship a **default logo** (eletrocromo brand): square **mark** for the icon pipeline; full **lockup** (mark + wordmark) for marketing/docs only.
+- Ship a **default logo** (eletrocromo brand): full **lockup** (mark + wordmark) vendored as RGBA; square **mark** is cropped from it when generating the icon matrix. Lockup stays for marketing/docs.
 - App authors supply **one** master **PNG or SVG** (`icon` in `eletrocromo.json` or `--icon`); tooling **rasterizes and generates** all platform artifacts.
 - Cover **Windows, macOS, Linux, Android, and web** favicon surfaces in the output tree.
 - **Pad + center** non-square masters (letterbox; transparency when the format allows).
@@ -361,8 +361,8 @@ Product decision for **apps built with eletrocromo**, not primarily for branding
 |-------|------|
 | Config | `icon` in `eletrocromo.json` (path relative to config dir) |
 | Flag | `--icon` overrides config (full word; no short `-i`) |
-| Missing both | Use **embedded default mark** (vendored asset; never a live `/tmp/…` path) |
-| Lockup | Separate vendored asset for README/site; **not** used for 16×16 / mipmaps |
+| Missing both | Crop the **embedded default lockup** to a square mark (vendored asset; never a live `/tmp/…` path) |
+| Lockup | Vendored RGBA source for README/site **and** the default icon pipeline |
 
 ### Output tree
 

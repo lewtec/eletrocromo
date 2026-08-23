@@ -83,12 +83,12 @@ go run ./cmd/eletrocromo build ios           # JIT Debug .app (Mac + Xcode iOS S
 
 ### App icons
 
-One master **PNG/JPEG** (or the shipped default mark) → full matrix under `dist/icons/`:
+One master **PNG/JPEG** (or a square mark cropped from the shipped lockup) → full matrix under `dist/icons/`:
 
 `windows/`, `macos/`, `linux/`, `android/` mipmaps, `web/`, `manifest.json`.
 
 ```bash
-# default mark
+# default lockup → mark + platform tree
 go run ./cmd/eletrocromo build icons --output dist/icons
 
 # app master (also: "icon" in eletrocromo.json)
