@@ -83,7 +83,6 @@ go run ./cmd/eletrocromo build ios \
 description = "Debug APKs for every example (ANDROID_HOME, JDK 17, Gradle 8.9+)"
 tools = { gradle = "8.9" }
 run = '''
-set -euo pipefail
 mkdir -p dist/examples
 for name in basic counter ticker astro; do
   go run ./cmd/eletrocromo build android \
@@ -96,7 +95,6 @@ done
 [tasks."release:examples:apple"]
 description = "Unsigned macOS and iOS Simulator .app zips for every example (macOS + Xcode)"
 run = '''
-set -euo pipefail
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "release:examples:apple needs macOS and Xcode" >&2
   exit 1
