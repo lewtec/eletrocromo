@@ -111,8 +111,13 @@ Push/`schedule` on `main` run CI only.
 mise run release -- patch   # or next | minor | major
 ```
 
-Artifacts: `eletrocromo_{Linux,Darwin,Windows}_{x86_64,arm64}` archives under
-GitHub Releases, stamped with `internal/version` ldflags.
+Artifacts under GitHub Releases, stamped with `internal/version` ldflags:
+
+- CLI: `eletrocromo_{Linux,Darwin,Windows}_{x86_64,arm64}`
+- Example desktop binaries: `example-{basic,counter,ticker,astro}_{Linux,Darwin,Windows}_{x86_64,arm64}`
+- Example Android debug APKs: `example-*-debug.apk`
+- Example macOS unsigned Debug `.app` zips: `example-*_macOS.app.zip`
+- Example iOS Simulator Debug `.app` zips: `example-*_iOS-simulator.app.zip`
 
 Version uses the usual Go release stamps (`internal/version`):
 

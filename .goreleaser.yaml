@@ -32,8 +32,48 @@ builds:
         -X github.com/lewtec/eletrocromo/internal/version.Date={{ .CommitDate }}
         -X github.com/lewtec/eletrocromo/internal/version.BuiltBy=goreleaser
 
+  # Desktop Helium binaries for each example (same GOOS/GOARCH as the CLI).
+  # Android APKs and macOS/iOS .app zips are attached by Autorelease, not here.
+  - id: example-basic
+    <<: &example-build
+      env:
+        - CGO_ENABLED=0
+      goos:
+        - linux
+        - darwin
+        - windows
+      goarch:
+        - amd64
+        - arm64
+      ignore:
+        - goos: windows
+          goarch: arm64
+    dir: ./examples/basic
+    main: .
+    binary: basic
+
+  - id: example-counter
+    <<: *example-build
+    dir: ./examples/counter
+    main: .
+    binary: counter
+
+  - id: example-ticker
+    <<: *example-build
+    dir: ./examples/ticker
+    main: .
+    binary: ticker
+
+  - id: example-astro
+    <<: *example-build
+    dir: ./examples/astro
+    main: .
+    binary: astro
+
 archives:
-  - formats: [tar.gz]
+  - id: eletrocromo
+    ids: [eletrocromo]
+    formats: [tar.gz]
     # uname-friendly OS/arch names
     name_template: >-
       {{ .ProjectName }}_
@@ -45,6 +85,34 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+
+  # One archive per example so a release asset maps to a single app.
+  - id: example-basic
+    <<: &example-archive
+      formats: [tar.gz]
+      name_template: >-
+        example-{{ .Binary }}_
+        {{- title .Os }}_
+        {{- if eq .Arch "amd64" }}x86_64
+        {{- else if eq .Arch "386" }}i386
+        {{- else }}{{ .Arch }}{{ end }}
+        {{- if .Arm }}v{{ .Arm }}{{ end }}
+      format_overrides:
+        - goos: windows
+          formats: [zip]
+    ids: [example-basic]
+
+  - id: example-counter
+    <<: *example-archive
+    ids: [example-counter]
+
+  - id: example-ticker
+    <<: *example-archive
+    ids: [example-ticker]
+
+  - id: example-astro
+    <<: *example-archive
+    ids: [example-astro]
 
 checksum:
   name_template: checksums.txt
@@ -73,3 +141,7 @@ release:
     tar -xzf eletrocromo.tar.gz
     ./eletrocromo version
     ```
+
+    Example apps (`basic`, `counter`, `ticker`, `astro`) ship on the same
+    release: desktop archives (`example-<name>_{Linux,Darwin,Windows}_*`),
+    Android debug APKs, and (from the macOS job) unsigned Debug `.app` zips.
