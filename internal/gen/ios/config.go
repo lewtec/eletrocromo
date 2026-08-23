@@ -1,9 +1,10 @@
-// Package macgen generates an ephemeral macOS WKWebView host and packages
-// a CGo-less darwin Go binary into an unsigned Debug .app.
+// Package ios generates an ephemeral iOS WKWebView host and packages
+// a GOOS=ios c-archive into a Debug .app.
 //
-// The importable eletrocromo library stays free of Xcode; this package only
-// writes an XcodeGen tree that runs the Go server and opens WKWebView.
-package macgen
+// iOS cannot exec a helper binary. The Go app is linked in-process
+// (EletrocromoStart) and the host waits on ELETROCROMO_READY_FILE.
+// The importable eletrocromo library stays free of Xcode.
+package ios
 
 import (
 	"encoding/json"
@@ -27,8 +28,11 @@ var (
 	ErrOutDirNotEmpty  = errors.New("out dir is not empty (use --force)")
 )
 
-// HelperName is the Go child binary inside Contents/MacOS.
-const HelperName = "eletrocromo-server"
+// ArchiveName is the c-archive stem written under lib/.
+const ArchiveName = "libeletrocromo"
+
+// BridgeGoName is overlaid into the app main package during the archive build.
+const BridgeGoName = "eletrocromo_ios_bridge.go"
 
 // Config is the project identity written into the generated tree.
 type Config struct {
@@ -111,7 +115,7 @@ func encodeConfigJSON(cfg Config) ([]byte, error) {
 		VersionCode:   cfg.VersionCode,
 		GoMain:        cfg.GoMain,
 		Icon:          cfg.Icon,
-		Generator:     "eletrocromo-macos",
+		Generator:     "eletrocromo-ios",
 	}
 	raw, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {

@@ -158,7 +158,7 @@ go run ./cmd/eletrocromo build android --config examples/counter/eletrocromo.jso
 Icons are generated when missing (`--refresh-icons` to force). Legacy
 `android build` / `android create` still work; prefer `build android`. Runtime:
 the service sets `ELETROCROMO_NO_UI=1` and loads the `ELETROCROMO_READY` URL in
-WebView. Packaging lives in `internal/apkgen/` + `internal/icons/` +
+WebView. Packaging lives in `internal/gen/apk/` + `internal/icons/` +
 `cmd/eletrocromo` (not in the core library import path for apps).
 
 ### macOS `.app` (straight build)
@@ -184,7 +184,7 @@ mise run macos:counter
 ```
 
 The `.app` is unsigned Debug. First open: right-click → Open. Off-loopback
-http(s) links open in the default browser. Packaging lives in `internal/macgen/`.
+http(s) links open in the default browser. Packaging lives in `internal/gen/mac/`.
 
 ### iOS `.app` (scaffold)
 
@@ -212,4 +212,4 @@ mise run ios:counter
 
 Default SDK is `iphonesimulator`. Use `--sdk iphoneos` for a device archive.
 The `.app` is Debug, unsigned (`CODE_SIGNING_ALLOWED=NO`). Off-loopback
-http(s) links open in Safari. Packaging lives in `internal/iosgen/`.
+http(s) links open in Safari. Packaging lives in `internal/gen/ios/`.

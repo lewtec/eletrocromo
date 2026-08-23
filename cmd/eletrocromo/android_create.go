@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/lewtec/eletrocromo/internal/apkgen"
+	"github.com/lewtec/eletrocromo/internal/gen/apk"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +39,7 @@ Example:
 			if err != nil {
 				return err
 			}
-			cfg := apkgen.Config{
+			cfg := apk.Config{
 				PackageID: id,
 				AppName:   name,
 				GoMain:    goMain,
@@ -50,7 +50,7 @@ Example:
 			if cmd.Flags().Changed("code") {
 				cfg.VersionCode = code
 			}
-			if err := apkgen.Create(apkgen.Options{
+			if err := apk.Create(apk.Options{
 				OutDir: absOut,
 				Force:  force,
 				Config: cfg,

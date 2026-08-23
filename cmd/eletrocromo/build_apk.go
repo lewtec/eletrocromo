@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lewtec/eletrocromo/internal/apkgen"
+	"github.com/lewtec/eletrocromo/internal/gen/apk"
 	"github.com/lewtec/eletrocromo/internal/icons"
 	"github.com/lucasew/workspaced/pkg/logging"
 	"github.com/lucasew/workspaced/pkg/taskgroup"
@@ -70,7 +70,7 @@ Example (from examples/counter):
 				return err
 			}
 			if strings.TrimSpace(cfg.PackageID) == "" {
-				return fmt.Errorf("%w: set package_id in %s or pass --id", ErrMissingPackageID, apkgen.ConfigFileName)
+				return fmt.Errorf("%w: set package_id in %s or pass --id", ErrMissingPackageID, apk.ConfigFileName)
 			}
 
 			// Same icon flag/config/output rules as "build icons".
@@ -79,7 +79,7 @@ Example (from examples/counter):
 
 			outAPK := strings.TrimSpace(out)
 			if outAPK == "" && !goOnly {
-				outAPK = apkgen.DefaultOutAPK(cfg.PackageID, cwd)
+				outAPK = apk.DefaultOutAPK(cfg.PackageID, cwd)
 			}
 
 			ctx := logging.NewWriterContext(cmd.ErrOrStderr())
@@ -113,7 +113,7 @@ Example (from examples/counter):
 			})
 
 			g.Go("android", taskgroup.IO, func(ctx context.Context, s *taskgroup.Status) error {
-				result, err := apkgen.Build(apkgen.BuildOptions{
+				result, err := apk.Build(apk.BuildOptions{
 					Config:      cfg,
 					BaseDir:     baseDir,
 					WorkDir:     workDir,
@@ -165,23 +165,23 @@ Example (from examples/counter):
 	return cmd
 }
 
-func loadAPKConfig(cwd, configPath, id, name, goMain, version string, code int, cmd *cobra.Command) (apkgen.Config, string, error) {
-	var cfg apkgen.Config
+func loadAPKConfig(cwd, configPath, id, name, goMain, version string, code int, cmd *cobra.Command) (apk.Config, string, error) {
+	var cfg apk.Config
 	baseDir := cwd
 	cfgPath := strings.TrimSpace(configPath)
 	if cfgPath == "" {
 		cfgPath = defaultConfigPath(cwd)
 	}
 	if cfgPath != "" {
-		loaded, dir, err := apkgen.LoadConfig(cfgPath)
+		loaded, dir, err := apk.LoadConfig(cfgPath)
 		if err != nil {
-			return apkgen.Config{}, "", err
+			return apk.Config{}, "", err
 		}
 		cfg = loaded
 		baseDir = dir
 	}
 
-	overlay := apkgen.Config{
+	overlay := apk.Config{
 		PackageID: id,
 		AppName:   name,
 		GoMain:    goMain,
@@ -195,6 +195,6 @@ func loadAPKConfig(cwd, configPath, id, name, goMain, version string, code int, 
 	if !cmd.Flags().Changed("go-main") {
 		overlay.GoMain = ""
 	}
-	cfg = apkgen.Merge(cfg, overlay)
+	cfg = apk.Merge(cfg, overlay)
 	return cfg, baseDir, nil
 }

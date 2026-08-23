@@ -1,4 +1,4 @@
-package apkgen
+package apk
 
 import (
 	"encoding/json"
@@ -11,8 +11,8 @@ import (
 
 // Config / go_main validation sentinels.
 var (
-	ErrConfigPathEmpty   = errors.New("config path is empty")
-	ErrGoMainNotDir      = errors.New("go_main must be a directory (main package)")
+	ErrConfigPathEmpty = errors.New("config path is empty")
+	ErrGoMainNotDir    = errors.New("go_main must be a directory (main package)")
 )
 
 // ConfigFileName is the standard project config next to the Go app (or in a generated host).
@@ -165,4 +165,3 @@ func encodeConfigJSON(cfg Config, generator string) ([]byte, error) {
 	}
 	return append(raw, '\n'), nil
 }
-

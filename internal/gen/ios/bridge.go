@@ -1,4 +1,4 @@
-package iosgen
+package ios
 
 // iosBridgeSource is overlaid into the app main package so c-archive
 // exports EletrocromoStart without editing the app tree.

@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lewtec/eletrocromo/internal/gen/ios"
 	"github.com/lewtec/eletrocromo/internal/icons"
-	"github.com/lewtec/eletrocromo/internal/iosgen"
 	"github.com/lucasew/workspaced/pkg/logging"
 	"github.com/lucasew/workspaced/pkg/taskgroup"
 	"github.com/spf13/cobra"
@@ -77,7 +77,7 @@ Example (from examples/counter):
 			iconSrc := resolveIconSource(cwd, iconPath, baseDir, apkCfg.Icon)
 			iconOut := resolveIconOutput(cwd, iconOutput)
 
-			cfg := iosgen.Config{
+			cfg := ios.Config{
 				PackageID:   apkCfg.PackageID,
 				AppName:     apkCfg.AppName,
 				VersionName: apkCfg.VersionName,
@@ -93,7 +93,7 @@ Example (from examples/counter):
 					parts := strings.Split(cfg.PackageID, ".")
 					appName = parts[len(parts)-1]
 				}
-				outApp = iosgen.DefaultOutApp(appName, cwd)
+				outApp = ios.DefaultOutApp(appName, cwd)
 			}
 
 			ctx := logging.NewWriterContext(cmd.ErrOrStderr())
@@ -124,7 +124,7 @@ Example (from examples/counter):
 			})
 
 			g.Go("ios", taskgroup.IO, func(ctx context.Context, s *taskgroup.Status) error {
-				result, err := iosgen.Build(iosgen.BuildOptions{
+				result, err := ios.Build(ios.BuildOptions{
 					Config:      cfg,
 					BaseDir:     baseDir,
 					WorkDir:     workDir,
@@ -167,7 +167,7 @@ Example (from examples/counter):
 	cmd.Flags().StringVar(&workDir, "workdir", "", "XcodeGen project dir (default: temp; kept if set)")
 	cmd.Flags().BoolVar(&keepWorkDir, "keep-workdir", false, "do not delete temp workdir after success")
 	cmd.Flags().BoolVar(&goOnly, "go-only", false, "only write host + ios c-archive (skip xcodebuild)")
-	cmd.Flags().StringVar(&sdk, "sdk", iosgen.SDKSimulator, "iphonesimulator or iphoneos (also: simulator, device)")
+	cmd.Flags().StringVar(&sdk, "sdk", ios.SDKSimulator, "iphonesimulator or iphoneos (also: simulator, device)")
 	cmd.Flags().StringVar(&iconPath, "icon", "", "master PNG/JPEG (overrides config icon)")
 	cmd.Flags().StringVar(&iconOutput, "output", icons.DefaultOutputDir, "icon tree root")
 	cmd.Flags().BoolVar(&refresh, "refresh-icons", false, "regenerate icons even if present")

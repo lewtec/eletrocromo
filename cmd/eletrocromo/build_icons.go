@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lewtec/eletrocromo/internal/apkgen"
+	"github.com/lewtec/eletrocromo/internal/gen/apk"
 	"github.com/lewtec/eletrocromo/internal/icons"
 	"github.com/spf13/cobra"
 )
@@ -65,7 +65,7 @@ SVG is not rasterized in-process yet — convert to PNG/JPEG first
 
 // defaultConfigPath returns cwd/eletrocromo.json when it is a regular file.
 func defaultConfigPath(cwd string) string {
-	try := filepath.Join(cwd, apkgen.ConfigFileName)
+	try := filepath.Join(cwd, apk.ConfigFileName)
 	if st, err := os.Stat(try); err == nil && !st.IsDir() {
 		return try
 	}
@@ -118,7 +118,7 @@ func resolveIconIO(cwd, configPath, iconFlag, outputFlag string) (source, output
 		cfgPath = defaultConfigPath(cwd)
 	}
 	if cfgPath != "" {
-		cfg, baseDir, err := apkgen.LoadConfig(cfgPath)
+		cfg, baseDir, err := apk.LoadConfig(cfgPath)
 		if err != nil {
 			return "", "", err
 		}
