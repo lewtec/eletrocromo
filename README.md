@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="internal/icons/default/lockup.png" alt="eletrocromo" width="240">
+</p>
+
 # eletrocromo
 
 A simpler approach to desktop apps without Electron or Wails: pure Go HTTP
