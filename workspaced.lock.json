@@ -13,6 +13,13 @@
       "depName": "rhysd/actionlint",
       "currentValue": "v1.7.12",
       "datasource": "github-releases"
+    },
+    {
+      "kind": "tool",
+      "ref": "registry:shellcheck",
+      "depName": "koalaman/shellcheck",
+      "currentValue": "0.11.0",
+      "datasource": "github-releases"
     }
   ]
 }
