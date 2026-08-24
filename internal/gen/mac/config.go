@@ -7,24 +7,21 @@ package mac
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-	"unicode"
 
 	"github.com/lewtec/eletrocromo"
+	"github.com/lewtec/eletrocromo/internal/gen/common"
 	"github.com/lewtec/eletrocromo/internal/version"
 )
 
 // Config / path sentinels.
 var (
-	ErrConfigPathEmpty = errors.New("config path is empty")
-	ErrGoMainNotDir    = errors.New("go_main must be a directory (main package)")
-	ErrOutDirRequired  = errors.New("out dir is required")
-	ErrOutPathNotDir   = errors.New("out path exists and is not a directory")
-	ErrOutDirNotEmpty  = errors.New("out dir is not empty (use --force)")
+	ErrConfigPathEmpty = common.ErrConfigPathEmpty
+	ErrGoMainNotDir    = common.ErrGoMainNotDir
+	ErrOutDirRequired  = common.ErrOutDirRequired
+	ErrOutPathNotDir   = common.ErrOutPathNotDir
+	ErrOutDirNotEmpty  = common.ErrOutDirNotEmpty
 )
 
 // HelperName is the Go child binary inside Contents/MacOS.
@@ -42,30 +39,7 @@ type Config struct {
 
 // ProductName is a filesystem-safe Xcode PRODUCT_NAME / .app stem.
 func (c Config) ProductName() string {
-	return productName(c.PackageID, c.AppName)
-}
-
-func productName(packageID, appName string) string {
-	name := strings.TrimSpace(appName)
-	name = strings.Map(func(r rune) rune {
-		switch {
-		case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_':
-			return r
-		case r == ' ':
-			return '-'
-		default:
-			return -1
-		}
-	}, name)
-	name = strings.Trim(name, "-_")
-	if name == "" {
-		parts := strings.Split(packageID, ".")
-		name = parts[len(parts)-1]
-	}
-	if name == "" {
-		name = "App"
-	}
-	return name
+	return common.ProductName(c.PackageID, c.AppName)
 }
 
 func (c Config) withDefaults() (Config, error) {
@@ -122,33 +96,10 @@ func encodeConfigJSON(cfg Config) ([]byte, error) {
 
 // ResolveGoMain returns an absolute directory containing the Go main package.
 func ResolveGoMain(goMain, baseDir string) (string, error) {
-	goMain = strings.TrimSpace(goMain)
-	if goMain == "" {
-		goMain = "."
-	}
-	if !filepath.IsAbs(goMain) {
-		goMain = filepath.Join(baseDir, goMain)
-	}
-	abs, err := filepath.Abs(goMain)
-	if err != nil {
-		return "", err
-	}
-	st, err := os.Stat(abs)
-	if err != nil {
-		return "", fmt.Errorf("go_main %q: %w", abs, err)
-	}
-	if !st.IsDir() {
-		return "", fmt.Errorf("%w: %s", ErrGoMainNotDir, abs)
-	}
-	return abs, nil
+	return common.ResolveGoMain(goMain, baseDir)
 }
 
 // DefaultOutApp is dist/<app_name>.app under cwd.
 func DefaultOutApp(appName, cwd string) string {
-	name := strings.TrimSpace(appName)
-	name = strings.TrimSuffix(name, ".app")
-	if name == "" {
-		name = "App"
-	}
-	return filepath.Join(cwd, "dist", name+".app")
+	return common.DefaultOutApp(appName, cwd)
 }
