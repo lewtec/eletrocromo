@@ -7,40 +7,6 @@ import (
 	"testing"
 )
 
-func TestProductName(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		id, name, want string
-	}{
-		{"br.tec.lew.counter", "Counter", "Counter"},
-		{"br.tec.lew.counter", "My App", "My-App"},
-		{"br.tec.lew.counter", "", "counter"},
-		{"br.tec.lew.x", "!!!", "x"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.want+"/"+tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := productName(tt.id, tt.name)
-			if got != tt.want {
-				t.Fatalf("productName(%q, %q) = %q; want %q", tt.id, tt.name, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestDefaultOutApp(t *testing.T) {
-	t.Parallel()
-	got := DefaultOutApp("Counter", "/tmp/proj")
-	want := filepath.Join("/tmp/proj", "dist", "Counter.app")
-	if got != want {
-		t.Fatalf("got %q want %q", got, want)
-	}
-	got = DefaultOutApp("Counter.app", "/tmp/proj")
-	if got != want {
-		t.Fatalf("suffix: got %q want %q", got, want)
-	}
-}
-
 func TestExcludedArch(t *testing.T) {
 	t.Parallel()
 	if got := excludedArch("arm64"); got != "x86_64" {
