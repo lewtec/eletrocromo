@@ -47,10 +47,21 @@ final class ServerProcess {
         try? FileManager.default.removeItem(at: readyFile)
 
         status("Waiting for server…")
-        OpenDrop.applyProcessEnv()
+        let dirs = OpenDrop.applyProcessEnv()
         DispatchQueue.global(qos: .userInitiated).async {
-            readyFile.path.withCString { ptr in
-                EletrocromoStart(UnsafeMutablePointer(mutating: ptr))
+            readyFile.path.withCString { ready in
+                dirs.data.path.withCString { data in
+                    dirs.cache.path.withCString { cache in
+                        dirs.config.path.withCString { config in
+                            EletrocromoStart(
+                                UnsafeMutablePointer(mutating: ready),
+                                UnsafeMutablePointer(mutating: data),
+                                UnsafeMutablePointer(mutating: cache),
+                                UnsafeMutablePointer(mutating: config)
+                            )
+                        }
+                    }
+                }
             }
         }
 

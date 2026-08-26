@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,13 +110,25 @@ func Token(s string) (Event, bool) {
 	if s == "" {
 		return Event{}, false
 	}
-	if strings.Contains(s, "://") {
+	if looksLikeURL(s) {
 		return Event{Kind: KindURL, URL: s}, true
 	}
 	if filepath.IsAbs(s) || fileLooksLikePath(s) {
 		return Event{Kind: KindFiles, Paths: []string{s}}, true
 	}
 	return Event{}, false
+}
+
+func looksLikeURL(s string) bool {
+	if len(s) >= 3 && s[1] == ':' && (s[2] == '\\' || s[2] == '/') {
+		return false
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme == "" {
+		return false
+	}
+	r := rune(u.Scheme[0])
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
 
 func fileLooksLikePath(s string) bool {

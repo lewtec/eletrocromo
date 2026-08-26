@@ -12,7 +12,8 @@ settings:
     TARGETED_DEVICE_FAMILY: "1,2"
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGNING_REQUIRED: NO
-    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_ALLOWED: YES
+    AD_HOC_CODE_SIGNING_ALLOWED: YES
     DEVELOPMENT_TEAM: ""
     ENABLE_BITCODE: NO
     ENABLE_DEBUG_DYLIB: NO
@@ -44,7 +45,7 @@ targets:
     dependencies:
       - target: {{.ShareProduct}}
         embed: true
-        codeSign: false
+        codeSign: true
   {{.ShareProduct}}:
     type: app-extension
     platform: iOS
@@ -62,7 +63,8 @@ targets:
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_REQUIRED: NO
-        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_ALLOWED: YES
+        AD_HOC_CODE_SIGNING_ALLOWED: YES
         CODE_SIGN_ENTITLEMENTS: ShareExtension/Share.entitlements
         SKIP_INSTALL: YES
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"

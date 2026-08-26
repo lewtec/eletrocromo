@@ -4,7 +4,7 @@ import (
 	"github.com/lewtec/eletrocromo/driver/dirs"
 )
 
-templ page(scheme string, d dirs.Dirs, events []event, names []string) {
+templ page(scheme string, d dirs.Dirs, events []event, names []string, probes []urlProbe) {
 	<!DOCTYPE html>
 	<html lang="en" data-theme="light">
 	<head>
@@ -22,23 +22,32 @@ templ page(scheme string, d dirs.Dirs, events []event, names []string) {
 		</div>
 		<main class="max-w-lg mx-auto p-4 flex flex-col gap-4">
 			<div role="alert" class="alert">
-				<span>Custom scheme <code>{ scheme }://</code> and <code>.md</code> / <code>.txt</code> files.</span>
+				<span>Custom scheme <code>{ scheme }</code>. Files land in Inbox. URLs accept opaque, query, unicode, and <code>name=</code>.</span>
 			</div>
 			<div class="card card-border">
 				<div class="card-body">
 					<h2 class="card-title">Try it</h2>
-					<div class="card-actions">
-						<a class="btn btn-primary" href={ templ.SafeURL(scheme + "://from-webview") }>Open { scheme }://from-webview</a>
+					<div class="card-actions flex-wrap">
+						for i, p := range probes {
+							<form method="POST" action="/open">
+								<input type="hidden" name="url" value={ p.Href }/>
+								if i == 0 {
+									<button class="btn btn-primary" type="submit">{ p.Label }</button>
+								} else {
+									<button class="btn btn-outline" type="submit">{ p.Label }</button>
+								}
+							</form>
+						}
 					</div>
 					<form method="POST" action="/note" class="fieldset">
 						<legend class="fieldset-legend">Write into Data</legend>
 						<input class="input w-full" type="text" name="text" placeholder="a note" required/>
-						<button class="btn" type="submit">Save note</button>
+						<button class="btn btn-outline" type="submit">Save note</button>
 					</form>
 					<form method="POST" action="/share" class="fieldset">
 						<legend class="fieldset-legend">Share out</legend>
 						<input class="input w-full" type="text" name="text" placeholder="text to share" required/>
-						<button class="btn" type="submit">Share</button>
+						<button class="btn btn-outline" type="submit">Share</button>
 					</form>
 				</div>
 			</div>
@@ -84,7 +93,13 @@ templ page(scheme string, d dirs.Dirs, events []event, names []string) {
 					} else {
 						<ul class="list">
 							for _, name := range names {
-								<li class="list-row font-mono text-sm break-all">{ name }</li>
+								<li class="list-row">
+									<span class="list-col-grow font-mono text-sm break-all">{ name }</span>
+									<form method="POST" action="/share-file">
+										<input type="hidden" name="name" value={ name }/>
+										<button class="btn btn-sm btn-outline" type="submit">Share</button>
+									</form>
+								</li>
 							}
 						</ul>
 					}

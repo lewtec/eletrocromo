@@ -17,31 +17,21 @@ final class ShareViewController: UIViewController {
         if let items = extensionContext?.inputItems as? [NSExtensionItem] {
             for item in items {
                 for provider in item.attachments ?? [] {
-                    if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                        if let url = await loadURL(provider, UTType.fileURL.identifier) {
-                            files.append(url)
-                        }
-                    } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
-                        if let url = await loadURL(provider, UTType.image.identifier) {
-                            files.append(url)
-                        } else if let dest = await loadImageFile(provider) {
-                            files.append(dest)
-                        }
-                    } else if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-                        if let url = await loadURL(provider, UTType.url.identifier) {
-                            texts.append(url.absoluteString)
-                        }
-                    } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
-                        if let text = try? await provider.loadItem(forTypeIdentifier: UTType.plainText.identifier) as? String {
-                            texts.append(text)
-                        }
-                    } else if provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) {
-                        if let data = try? await provider.loadItem(forTypeIdentifier: UTType.data.identifier) as? Data {
-                            let name = provider.suggestedName ?? "share.bin"
-                            let dest = FileManager.default.temporaryDirectory.appendingPathComponent(name)
-                            try? data.write(to: dest)
-                            files.append(dest)
-                        }
+                    if let url = await loadBestFile(provider) {
+                        files.append(url)
+                        continue
+                    }
+                    if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier),
+                       let url = await loadURL(provider, UTType.url.identifier),
+                       url.scheme?.lowercased() != "file"
+                    {
+                        texts.append(url.absoluteString)
+                        continue
+                    }
+                    if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier),
+                       let text = try? await provider.loadItem(forTypeIdentifier: UTType.plainText.identifier) as? String
+                    {
+                        texts.append(text)
                     }
                 }
             }
@@ -49,6 +39,51 @@ final class ShareViewController: UIViewController {
         stash(files: files, texts: texts)
         _ = openURL(wakeURL)
         extensionContext?.completeRequest(returningItems: nil)
+    }
+
+    // Photos claims public.file-url but loadItem's URL is often not copyable.
+    // loadFileRepresentation gives a real file that lives for the callback.
+    private func loadBestFile(_ provider: NSItemProvider) async -> URL? {
+        let types = [
+            UTType.image.identifier,
+            UTType.jpeg.identifier,
+            UTType.png.identifier,
+            UTType.heic.identifier,
+            UTType.fileURL.identifier,
+            UTType.data.identifier,
+        ]
+        for type in types {
+            guard provider.hasItemConformingToTypeIdentifier(type) else { continue }
+            if let url = await loadFileCopy(provider, type) {
+                return url
+            }
+        }
+        if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+            return await loadImageFile(provider)
+        }
+        return nil
+    }
+
+    private func loadFileCopy(_ provider: NSItemProvider, _ type: String) async -> URL? {
+        await withCheckedContinuation { cont in
+            _ = provider.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
+                guard let url else {
+                    cont.resume(returning: nil)
+                    return
+                }
+                let dest = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString + "-" + url.lastPathComponent)
+                do {
+                    if FileManager.default.fileExists(atPath: dest.path) {
+                        try FileManager.default.removeItem(at: dest)
+                    }
+                    try FileManager.default.copyItem(at: url, to: dest)
+                    cont.resume(returning: dest)
+                } catch {
+                    cont.resume(returning: nil)
+                }
+            }
+        }
     }
 
     private func loadImageFile(_ provider: NSItemProvider) async -> URL? {

@@ -37,6 +37,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        OpenDrop.drainIncoming()
+    }
+
     func applicationWillTerminate(_ application: UIApplication) {
         server.stop()
     }

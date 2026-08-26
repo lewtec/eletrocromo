@@ -1,6 +1,12 @@
 import Foundation
 
 enum OpenDrop {
+    struct Dirs {
+        let data: URL
+        let cache: URL
+        let config: URL
+    }
+
     static func cacheDir() -> URL {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
@@ -8,7 +14,7 @@ enum OpenDrop {
         return base
     }
 
-    static func applyProcessEnv() {
+    static func dirs() -> Dirs {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let data = support.appendingPathComponent("data", isDirectory: true)
@@ -16,9 +22,16 @@ enum OpenDrop {
         let cache = cacheDir()
         try? FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
-        setenv("ELETROCROMO_DATA_DIR", data.path, 1)
-        setenv("ELETROCROMO_CACHE_DIR", cache.path, 1)
-        setenv("ELETROCROMO_CONFIG_DIR", config.path, 1)
+        return Dirs(data: data, cache: cache, config: config)
+    }
+
+    @discardableResult
+    static func applyProcessEnv() -> Dirs {
+        let d = dirs()
+        setenv("ELETROCROMO_DATA_DIR", d.data.path, 1)
+        setenv("ELETROCROMO_CACHE_DIR", d.cache.path, 1)
+        setenv("ELETROCROMO_CONFIG_DIR", d.config.path, 1)
+        return d
     }
 
     static func deliver(_ urls: [URL]) {
@@ -50,15 +63,33 @@ enum OpenDrop {
         }
         let src = root.appendingPathComponent("open.jsonl")
         guard let data = try? Data(contentsOf: src), !data.isEmpty else { return }
-        let dest = cacheDir().appendingPathComponent("open.jsonl")
-        if let h = try? FileHandle(forWritingTo: dest) {
-            defer { try? h.close() }
-            _ = try? h.seekToEnd()
-            try? h.write(contentsOf: data)
-        } else {
-            try? data.write(to: dest)
+        let text = String(data: data, encoding: .utf8) ?? ""
+        for line in text.split(whereSeparator: \.isNewline) {
+            guard !line.isEmpty, let rewritten = adoptGroupLine(String(line)) else { continue }
+            append(rewritten)
         }
         try? FileManager.default.removeItem(at: src)
+    }
+
+    // Copies group-container files into Cache/inbox and rewrites paths.
+    private static func adoptGroupLine(_ line: String) -> String? {
+        guard let raw = line.data(using: .utf8),
+              var obj = try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
+        else { return nil }
+        if let paths = obj["paths"] as? [String] {
+            var copied: [String] = []
+            for p in paths {
+                if let dest = materialize(URL(fileURLWithPath: p)) {
+                    copied.append(dest)
+                    try? FileManager.default.removeItem(atPath: p)
+                }
+            }
+            if copied.isEmpty { return nil }
+            obj["paths"] = copied
+            let out = try? JSONSerialization.data(withJSONObject: obj)
+            return String(data: out ?? Data(), encoding: .utf8)
+        }
+        return line
     }
 
     private static func materialize(_ url: URL) -> String? {

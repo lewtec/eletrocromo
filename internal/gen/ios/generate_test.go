@@ -97,6 +97,9 @@ func TestCreate_WritesHost(t *testing.T) {
 	if strings.Contains(s, "type: app-extension") {
 		t.Fatalf("share extension should be off without files:\n%s", s)
 	}
+	if !strings.Contains(s, "CODE_SIGNING_ALLOWED: YES") {
+		t.Fatalf("ad-hoc signing required for app groups:\n%s", s)
+	}
 
 	plist, err := os.ReadFile(filepath.Join(out, "Info.plist"))
 	if err != nil {
@@ -150,6 +153,9 @@ func TestCreate_WritesHost(t *testing.T) {
 	if !strings.Contains(ss, "EletrocromoStart") {
 		t.Fatalf("c-archive entry missing:\n%s", ss)
 	}
+	if !strings.Contains(ss, "dirs.cache.path") {
+		t.Fatalf("start must pass cache dir into Go:\n%s", ss)
+	}
 
 	ui, err := os.ReadFile(filepath.Join(out, "Sources/RootViewController.swift"))
 	if err != nil {
@@ -191,6 +197,9 @@ func TestCreate_WritesHost(t *testing.T) {
 	}
 	if !strings.Contains(ds, "quietSplash") {
 		t.Fatalf("quiet splash missing:\n%s", ds)
+	}
+	if !strings.Contains(ds, "applicationDidBecomeActive") {
+		t.Fatalf("become-active drain missing:\n%s", ds)
 	}
 
 	hdr, err := os.ReadFile(filepath.Join(out, "Sources/eletrocromo-Bridging-Header.h"))
@@ -253,6 +262,20 @@ func TestCreate_CapabilitiesPlist(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(out, "Sources/OpenDrop.swift")); err != nil {
 		t.Fatal(err)
 	}
+	openDrop, err := os.ReadFile(filepath.Join(out, "Sources/OpenDrop.swift"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(openDrop), "adoptGroupLine") {
+		t.Fatalf("drain must copy group files into Cache/inbox:\n%s", openDrop)
+	}
+	shareSrc, err := os.ReadFile(filepath.Join(out, "ShareExtension/ShareViewController.swift"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(shareSrc), "loadFileRepresentation") {
+		t.Fatalf("photos share needs loadFileRepresentation:\n%s", shareSrc)
+	}
 }
 
 func TestCreate_RejectsBadID(t *testing.T) {
@@ -272,6 +295,15 @@ func TestBridgeSource_ExportsStart(t *testing.T) {
 	}
 	if !strings.Contains(iosBridgeSource, "ELETROCROMO_READY_FILE") {
 		t.Fatal("missing READY_FILE")
+	}
+	if !strings.Contains(iosBridgeSource, "ELETROCROMO_CACHE_DIR") {
+		t.Fatal("missing CACHE_DIR")
+	}
+	if !strings.Contains(iosBridgeSource, "ELETROCROMO_DATA_DIR") {
+		t.Fatal("missing DATA_DIR")
+	}
+	if !strings.Contains(iosBridgeSource, "ELETROCROMO_CONFIG_DIR") {
+		t.Fatal("missing CONFIG_DIR")
 	}
 	if !strings.Contains(iosBridgeSource, "main()") {
 		t.Fatal("missing main() call")
