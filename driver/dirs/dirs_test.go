@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lewtec/eletrocromo"
 	"github.com/lewtec/eletrocromo/driver/dirs"
 	_ "github.com/lewtec/eletrocromo/driver/dirs/os"
 )
@@ -38,8 +37,8 @@ func TestResolve_InboxUnderCache(t *testing.T) {
 }
 
 func TestResolve_RejectsBadAppID(t *testing.T) {
-	_, err := dirs.Resolve(t.Context(), "not-an-id")
-	if !errors.Is(err, eletrocromo.ErrAppIDNotReverseDNS) {
-		t.Fatalf("err = %v; want ErrAppIDNotReverseDNS", err)
+	_, err := dirs.Resolve(t.Context(), "../evil")
+	if !errors.Is(err, dirs.ErrInvalidAppID) {
+		t.Fatalf("err = %v", err)
 	}
 }

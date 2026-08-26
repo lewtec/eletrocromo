@@ -109,9 +109,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val intent = Intent(this, ServerService::class.java)
-        startForegroundService(intent)
-        bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        val svc = Intent(this, ServerService::class.java)
+        startForegroundService(svc)
+        bindService(svc, connection, Context.BIND_AUTO_CREATE)
+        OpenDrop.handle(this, intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        OpenDrop.handle(this, intent)
     }
 
     private fun refreshPage() {

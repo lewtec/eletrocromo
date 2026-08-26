@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lewtec/eletrocromo/internal/gen/common"
 )
 
 func TestCreate_PackageIDLayout(t *testing.T) {
@@ -73,6 +75,14 @@ func TestCreate_PackageIDLayout(t *testing.T) {
 		t.Fatalf("go_main: %s", cfg)
 	}
 
+	manifest, err := os.ReadFile(filepath.Join(out, "app/src/main/AndroidManifest.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(manifest), `android:scheme=`) {
+		t.Fatalf("unexpected scheme filter:\n%s", manifest)
+	}
+
 	sh, err := os.ReadFile(filepath.Join(out, "scripts/build-go.sh"))
 	if err != nil {
 		t.Fatal(err)
@@ -86,6 +96,39 @@ func TestCreate_PackageIDLayout(t *testing.T) {
 	}
 	if !strings.Contains(string(sh), "GOOS=android") {
 		t.Fatalf("script missing GOOS=android")
+	}
+}
+
+func TestCreate_CapabilitiesIntentFilters(t *testing.T) {
+	out := t.TempDir()
+	err := Create(Options{
+		OutDir: out,
+		Config: Config{
+			PackageID: "br.tec.lew.counter",
+			AppName:   "Counter",
+			GoMain:    ".",
+			Capabilities: common.Capabilities{
+				URL:   &common.URLCap{Schemes: []string{"myapp"}},
+				Files: &common.FilesCap{Types: []common.FileType{{Ext: ".md", MIME: "text/markdown"}}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(out, "app/src/main/AndroidManifest.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(manifest)
+	if !strings.Contains(s, `android:scheme="myapp"`) {
+		t.Fatalf("scheme:\n%s", s)
+	}
+	if !strings.Contains(s, `android:mimeType="text/markdown"`) {
+		t.Fatalf("mime:\n%s", s)
+	}
+	if _, err := os.Stat(filepath.Join(out, "app/src/main/java/br/tec/lew/counter/OpenDrop.kt")); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -33,12 +33,13 @@ const BridgeGoName = "eletrocromo_ios_bridge.go"
 
 // Config is the project identity written into the generated tree.
 type Config struct {
-	PackageID   string `json:"package_id"`
-	AppName     string `json:"app_name"`
-	VersionName string `json:"version_name"`
-	VersionCode int    `json:"version_code"`
-	GoMain      string `json:"go_main"`
-	Icon        string `json:"icon,omitempty"`
+	PackageID    string              `json:"package_id"`
+	AppName      string              `json:"app_name"`
+	VersionName  string              `json:"version_name"`
+	VersionCode  int                 `json:"version_code"`
+	GoMain       string              `json:"go_main"`
+	Icon         string              `json:"icon,omitempty"`
+	Capabilities common.Capabilities `json:"capabilities,omitempty"`
 }
 
 // ProductName is a filesystem-safe Xcode PRODUCT_NAME / .app stem.
@@ -68,19 +69,23 @@ func (c Config) withDefaults() (Config, error) {
 	if strings.TrimSpace(c.GoMain) == "" {
 		c.GoMain = "."
 	}
+	if err := c.Capabilities.Validate(); err != nil {
+		return Config{}, err
+	}
 	return c, nil
 }
 
 func encodeConfigJSON(cfg Config) ([]byte, error) {
 	doc := struct {
-		SchemaVersion int    `json:"schema_version"`
-		PackageID     string `json:"package_id"`
-		AppName       string `json:"app_name"`
-		VersionName   string `json:"version_name"`
-		VersionCode   int    `json:"version_code"`
-		GoMain        string `json:"go_main"`
-		Icon          string `json:"icon,omitempty"`
-		Generator     string `json:"generator"`
+		SchemaVersion int                 `json:"schema_version"`
+		PackageID     string              `json:"package_id"`
+		AppName       string              `json:"app_name"`
+		VersionName   string              `json:"version_name"`
+		VersionCode   int                 `json:"version_code"`
+		GoMain        string              `json:"go_main"`
+		Icon          string              `json:"icon,omitempty"`
+		Generator     string              `json:"generator"`
+		Capabilities  common.Capabilities `json:"capabilities,omitempty"`
 	}{
 		SchemaVersion: 1,
 		PackageID:     cfg.PackageID,
@@ -90,6 +95,7 @@ func encodeConfigJSON(cfg Config) ([]byte, error) {
 		GoMain:        cfg.GoMain,
 		Icon:          cfg.Icon,
 		Generator:     "eletrocromo-ios",
+		Capabilities:  cfg.Capabilities,
 	}
 	raw, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {

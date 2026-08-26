@@ -1,0 +1,82 @@
+import Foundation
+
+enum OpenDrop {
+    static func cacheDir() -> URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }
+
+    static func applyProcessEnv() {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let data = support.appendingPathComponent("data", isDirectory: true)
+        let config = support.appendingPathComponent("config", isDirectory: true)
+        let cache = cacheDir()
+        try? FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+        setenv("ELETROCROMO_DATA_DIR", data.path, 1)
+        setenv("ELETROCROMO_CACHE_DIR", cache.path, 1)
+        setenv("ELETROCROMO_CONFIG_DIR", config.path, 1)
+    }
+
+    static func deliver(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        var files: [String] = []
+        for url in urls {
+            let scheme = url.scheme?.lowercased() ?? ""
+            if scheme != "http", scheme != "https", scheme != "file" {
+                append(jsonLine(kind: "url", url: url.absoluteString, paths: nil))
+                continue
+            }
+            if let path = materialize(url) {
+                files.append(path)
+            }
+        }
+        if !files.isEmpty {
+            append(jsonLine(kind: "files", url: nil, paths: files))
+        }
+    }
+
+    private static func materialize(_ url: URL) -> String? {
+        let inbox = cacheDir().appendingPathComponent("inbox", isDirectory: true)
+        try? FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        let dest = inbox.appendingPathComponent(UUID().uuidString + "-" + url.lastPathComponent)
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+        }
+        do {
+            if FileManager.default.fileExists(atPath: dest.path) {
+                try FileManager.default.removeItem(at: dest)
+            }
+            try FileManager.default.copyItem(at: url, to: dest)
+            return dest.path
+        } catch {
+            return url.isFileURL ? url.path : nil
+        }
+    }
+
+    private static func append(_ line: String) {
+        let file = cacheDir().appendingPathComponent("open.jsonl")
+        let data = (line + "\n").data(using: .utf8) ?? Data()
+        if FileManager.default.fileExists(atPath: file.path) {
+            if let h = try? FileHandle(forWritingTo: file) {
+                defer { try? h.close() }
+                _ = try? h.seekToEnd()
+                try? h.write(contentsOf: data)
+                return
+            }
+        }
+        try? data.write(to: file, options: .atomic)
+    }
+
+    private static func jsonLine(kind: String, url: String?, paths: [String]?) -> String {
+        var obj: [String: Any] = ["kind": kind]
+        if let url { obj["url"] = url }
+        if let paths { obj["paths"] = paths }
+        let raw = try? JSONSerialization.data(withJSONObject: obj, options: [])
+        return String(data: raw ?? Data(), encoding: .utf8) ?? ""
+    }
+}

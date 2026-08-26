@@ -92,6 +92,9 @@ class ServerService : Service() {
             env["ELETROCROMO_NO_UI"] = "1"
             env["ELETROCROMO_NO_ENSURE"] = "1"
             env["ELETROCROMO_READY_FILE"] = readyFile.absolutePath
+            env["ELETROCROMO_DATA_DIR"] = filesDir.absolutePath
+            env["ELETROCROMO_CACHE_DIR"] = cacheDir.absolutePath
+            env["ELETROCROMO_CONFIG_DIR"] = File(filesDir, "config").absolutePath
             env["HOME"] = filesDir.absolutePath
             env["TMPDIR"] = cacheDir.absolutePath
             // Pure-Go DNS cannot talk to Android netd on [::1]:53; pass real resolvers.

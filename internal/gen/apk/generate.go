@@ -18,6 +18,7 @@ import (
 	"text/template"
 
 	"github.com/lewtec/eletrocromo"
+	"github.com/lewtec/eletrocromo/internal/gen/common"
 	"github.com/lewtec/eletrocromo/internal/version"
 )
 
@@ -50,6 +51,8 @@ type Config struct {
 	Icon string `json:"icon,omitempty"`
 	// ABIs lists Android ABIs for the fat APK (default DefaultABIs).
 	ABIs []string `json:"abis,omitempty"`
+	// Capabilities is the closed catalog (url, files) emitted into the host manifest.
+	Capabilities common.Capabilities `json:"capabilities,omitempty"`
 }
 
 // templateData is passed to text/template for file bodies.
@@ -59,6 +62,8 @@ type templateData struct {
 	RootProjectName string
 	// PackagePath is PackageID with dots → slashes (Kotlin source dir).
 	PackagePath string
+	// IntentFiltersXML is extra activity intent-filters from capabilities.
+	IntentFiltersXML string
 }
 
 // Options controls Create.
@@ -89,10 +94,14 @@ func Create(opts Options) error {
 		return err
 	}
 
+	if err := cfg.Capabilities.Validate(); err != nil {
+		return err
+	}
 	data := templateData{
-		Config:          cfg,
-		RootProjectName: rootProjectName(cfg.PackageID, cfg.AppName),
-		PackagePath:     strings.ReplaceAll(cfg.PackageID, ".", "/"),
+		Config:           cfg,
+		RootProjectName:  rootProjectName(cfg.PackageID, cfg.AppName),
+		PackagePath:      strings.ReplaceAll(cfg.PackageID, ".", "/"),
+		IntentFiltersXML: cfg.Capabilities.AndroidIntentFilters(),
 	}
 
 	if err := walkTemplate(data, out); err != nil {

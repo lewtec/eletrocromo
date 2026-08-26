@@ -34,6 +34,51 @@ func TestLoadConfig(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_Capabilities(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ConfigFileName)
+	body := `{
+  "schema_version": 1,
+  "package_id": "br.tec.lew.demo",
+  "app_name": "Demo",
+  "go_main": ".",
+  "capabilities": {
+    "url": {"schemes": ["myapp"]},
+    "files": {"types": [{"ext": ".md", "mime": "text/markdown"}]}
+  }
+}
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := LoadConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Capabilities.URL == nil || cfg.Capabilities.URL.Schemes[0] != "myapp" {
+		t.Fatalf("%+v", cfg.Capabilities)
+	}
+}
+
+func TestLoadConfig_UnknownCapability(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ConfigFileName)
+	body := `{
+  "schema_version": 1,
+  "package_id": "br.tec.lew.demo",
+  "app_name": "Demo",
+  "capabilities": {"camera": {"usage": "x"}}
+}
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := LoadConfig(dir)
+	if err == nil {
+		t.Fatal("want error")
+	}
+}
+
 func TestMerge_FlagsWin(t *testing.T) {
 	base := Config{PackageID: "a.b.c", AppName: "A", GoMain: "."}
 	out := Merge(base, Config{AppName: "B", GoMain: "./cmd"})
