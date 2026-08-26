@@ -206,6 +206,7 @@ func (c Capabilities) PlistDocumentTypes() string {
 		b.WriteString("\t\t</dict>\n")
 	}
 	b.WriteString("\t</array>\n")
+	b.WriteString("\t<key>LSSupportsOpeningDocumentsInPlace</key>\n\t<false/>\n")
 	return b.String()
 }
 

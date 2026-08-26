@@ -165,6 +165,9 @@ func TestCreate_WritesHost(t *testing.T) {
 	if !strings.Contains(us, "Try again") {
 		t.Fatalf("android retry copy missing:\n%s", us)
 	}
+	if !strings.Contains(us, "openExternal") {
+		t.Fatalf("custom scheme open missing:\n%s", us)
+	}
 	if !strings.Contains(us, "revealIfStuck") {
 		t.Fatalf("stuck reveal missing:\n%s", us)
 	}

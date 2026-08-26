@@ -12,6 +12,7 @@ xcodegen = "2.46.0"
 go -C examples/basic mod download
 go -C examples/counter mod download
 go -C examples/ticker mod download
+go -C examples/inbox mod download
 go -C examples/astro mod download
 """
 install = { depends = ["install:*"] }
@@ -66,12 +67,21 @@ go run ./cmd/eletrocromo build ios \
   --go-only \
   --workdir dist/ios-counter
 """
+"ios:inbox" = """
+go run ./cmd/eletrocromo build ios \
+  --config examples/inbox/eletrocromo.json \
+  --out dist/Inbox.app \
+  --workdir dist/ios-inbox
+"""
+"ios:inbox:sim" = "bash examples/inbox/sim.sh sim"
+"ios:inbox:ping" = "bash examples/inbox/sim.sh ping"
 "icons" = "go run ./cmd/eletrocromo build icons --refresh-icons"
 
 # Dogfood host resolve + Helium --app (Ctrl+C to quit).
 "example:basic" = "go -C examples/basic run ."
 "example:counter" = "go -C examples/counter run ."
 "example:ticker" = "go -C examples/ticker run ."
+"example:inbox" = "go -C examples/inbox run ."
 
 # Astro + orvalho: tools/tasks live in examples/astro/mise.toml
 "example:astro:build" = "mise -C examples/astro run build"

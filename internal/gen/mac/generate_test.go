@@ -88,6 +88,9 @@ func TestCreate_WritesHost(t *testing.T) {
 	if !strings.Contains(string(ui), "arrow.clockwise") {
 		t.Fatalf("reload symbol missing:\n%s", ui)
 	}
+	if !strings.Contains(string(ui), "openExternal") {
+		t.Fatalf("custom scheme open missing:\n%s", ui)
+	}
 }
 
 func TestCreate_CapabilitiesPlist(t *testing.T) {
