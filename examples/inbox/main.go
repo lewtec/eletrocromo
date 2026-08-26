@@ -22,6 +22,9 @@ import (
 	"github.com/lewtec/eletrocromo/driver/dirs"
 	_ "github.com/lewtec/eletrocromo/driver/dirs/os"
 	"github.com/lewtec/eletrocromo/driver/open"
+	"github.com/lewtec/eletrocromo/driver/share"
+	_ "github.com/lewtec/eletrocromo/driver/share/desktop"
+	_ "github.com/lewtec/eletrocromo/driver/share/hostfile"
 )
 
 const (
@@ -147,6 +150,11 @@ var page = template.Must(template.New("inbox").Funcs(template.FuncMap{
           <input class="input w-full" type="text" name="text" placeholder="a note" required>
           <button class="btn" type="submit">Save note</button>
         </form>
+        <form method="POST" action="/share" class="fieldset">
+          <legend class="fieldset-legend">Share out</legend>
+          <input class="input w-full" type="text" name="text" placeholder="text to share" required>
+          <button class="btn" type="submit">Share</button>
+        </form>
       </div>
     </div>
 
@@ -239,6 +247,27 @@ func main() {
 			return
 		}
 		st.add(event{When: time.Now(), Kind: "note", Text: name, Body: text})
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})
+	mux.HandleFunc("/share", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		text := strings.TrimSpace(r.Form.Get("text"))
+		if text == "" {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		if err := share.Out(r.Context(), share.Item{Text: text}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		st.add(event{When: time.Now(), Kind: "share", Text: text})
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

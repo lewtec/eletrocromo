@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -29,7 +30,11 @@ var reservedSchemes = map[string]struct{}{
 type Capabilities struct {
 	URL   *URLCap   `json:"url,omitempty"`
 	Files *FilesCap `json:"files,omitempty"`
+	Share *ShareCap `json:"share,omitempty"`
 }
+
+// ShareCap enables Go-side share-out (system share sheet).
+type ShareCap struct{}
 
 // URLCap registers custom URL schemes.
 type URLCap struct {
@@ -50,7 +55,8 @@ type FileType struct {
 // Empty reports whether any capability is set.
 func (c Capabilities) Empty() bool {
 	return (c.URL == nil || len(c.URL.Schemes) == 0) &&
-		(c.Files == nil || len(c.Files.Types) == 0)
+		(c.Files == nil || len(c.Files.Types) == 0) &&
+		c.Share == nil
 }
 
 // ParseCapabilities decodes the capabilities object. Unknown keys fail.
@@ -65,7 +71,7 @@ func ParseCapabilities(raw json.RawMessage) (Capabilities, error) {
 	}
 	for k := range probe {
 		switch k {
-		case "url", "files":
+		case "url", "files", "share":
 		default:
 			return Capabilities{}, fmt.Errorf("%w: %q", ErrCapabilityUnknown, k)
 		}
@@ -164,7 +170,14 @@ func (c Capabilities) AndroidIntentFilters() string {
 
 // PlistURLTypes is CFBundleURLTypes XML, or empty.
 func (c Capabilities) PlistURLTypes(packageID string) string {
-	if c.URL == nil || len(c.URL.Schemes) == 0 {
+	var schemes []string
+	if c.URL != nil {
+		schemes = append(schemes, c.URL.Schemes...)
+	}
+	if len(schemes) == 0 && (c.Files != nil || c.Share != nil) {
+		schemes = []string{c.WakeScheme(packageID)}
+	}
+	if len(schemes) == 0 {
 		return ""
 	}
 	var b strings.Builder
@@ -172,7 +185,7 @@ func (c Capabilities) PlistURLTypes(packageID string) string {
 	b.WriteString("\t\t\t<key>CFBundleURLName</key>\n\t\t\t<string>")
 	b.WriteString(XMLEscape(packageID))
 	b.WriteString("</string>\n\t\t\t<key>CFBundleURLSchemes</key>\n\t\t\t<array>\n")
-	for _, s := range c.URL.Schemes {
+	for _, s := range schemes {
 		b.WriteString("\t\t\t\t<string>")
 		b.WriteString(XMLEscape(s))
 		b.WriteString("</string>\n")
@@ -188,26 +201,89 @@ func (c Capabilities) PlistDocumentTypes() string {
 	}
 	var b strings.Builder
 	b.WriteString("\t<key>CFBundleDocumentTypes</key>\n\t<array>\n")
+	imported := map[string]FileType{}
 	for _, ft := range c.Files.Types {
 		name := strings.TrimPrefix(ft.Ext, ".")
+		uti := utiFor(ft.MIME)
 		b.WriteString("\t\t<dict>\n")
 		b.WriteString("\t\t\t<key>CFBundleTypeName</key>\n\t\t\t<string>")
 		b.WriteString(XMLEscape(name))
 		b.WriteString("</string>\n")
 		b.WriteString("\t\t\t<key>CFBundleTypeRole</key>\n\t\t\t<string>Viewer</string>\n")
+		b.WriteString("\t\t\t<key>LSHandlerRank</key>\n\t\t\t<string>Alternate</string>\n")
 		b.WriteString("\t\t\t<key>CFBundleTypeExtensions</key>\n\t\t\t<array>\n")
 		b.WriteString("\t\t\t\t<string>")
 		b.WriteString(XMLEscape(name))
 		b.WriteString("</string>\n\t\t\t</array>\n")
 		b.WriteString("\t\t\t<key>LSItemContentTypes</key>\n\t\t\t<array>\n")
 		b.WriteString("\t\t\t\t<string>")
-		b.WriteString(XMLEscape(utiFor(ft.MIME)))
-		b.WriteString("</string>\n\t\t\t</array>\n")
+		b.WriteString(XMLEscape(uti))
+		b.WriteString("</string>\n")
+		if strings.HasPrefix(ft.MIME, "text/") && uti != "public.text" {
+			b.WriteString("\t\t\t\t<string>public.text</string>\n")
+		}
+		b.WriteString("\t\t\t</array>\n")
 		b.WriteString("\t\t</dict>\n")
+		if !systemUTI(uti) {
+			imported[uti] = ft
+		}
 	}
 	b.WriteString("\t</array>\n")
 	b.WriteString("\t<key>LSSupportsOpeningDocumentsInPlace</key>\n\t<false/>\n")
+	if len(imported) > 0 {
+		b.WriteString("\t<key>UTImportedTypeDeclarations</key>\n\t<array>\n")
+		utis := make([]string, 0, len(imported))
+		for uti := range imported {
+			utis = append(utis, uti)
+		}
+		slices.Sort(utis)
+		for _, uti := range utis {
+			ft := imported[uti]
+			name := strings.TrimPrefix(ft.Ext, ".")
+			b.WriteString("\t\t<dict>\n")
+			b.WriteString("\t\t\t<key>UTTypeIdentifier</key>\n\t\t\t<string>")
+			b.WriteString(XMLEscape(uti))
+			b.WriteString("</string>\n")
+			b.WriteString("\t\t\t<key>UTTypeDescription</key>\n\t\t\t<string>")
+			b.WriteString(XMLEscape(name))
+			b.WriteString("</string>\n")
+			b.WriteString("\t\t\t<key>UTTypeConformsTo</key>\n\t\t\t<array>\n")
+			b.WriteString("\t\t\t\t<string>public.plain-text</string>\n")
+			b.WriteString("\t\t\t</array>\n")
+			b.WriteString("\t\t\t<key>UTTypeTagSpecification</key>\n\t\t\t<dict>\n")
+			b.WriteString("\t\t\t\t<key>public.filename-extension</key>\n\t\t\t\t<array>\n")
+			b.WriteString("\t\t\t\t\t<string>")
+			b.WriteString(XMLEscape(name))
+			b.WriteString("</string>\n\t\t\t\t</array>\n")
+			b.WriteString("\t\t\t\t<key>public.mime-type</key>\n\t\t\t\t<array>\n")
+			b.WriteString("\t\t\t\t\t<string>")
+			b.WriteString(XMLEscape(ft.MIME))
+			b.WriteString("</string>\n\t\t\t\t</array>\n")
+			b.WriteString("\t\t\t</dict>\n")
+			b.WriteString("\t\t</dict>\n")
+		}
+		b.WriteString("\t</array>\n")
+	}
 	return b.String()
+}
+
+func systemUTI(uti string) bool {
+	return strings.HasPrefix(uti, "public.") ||
+		uti == "com.adobe.pdf"
+}
+
+// WakeScheme is the custom URL used to foreground the app after a share.
+func (c Capabilities) WakeScheme(packageID string) string {
+	if c.URL != nil && len(c.URL.Schemes) > 0 {
+		return c.URL.Schemes[0]
+	}
+	parts := strings.Split(packageID, ".")
+	return "eletrocromo-" + parts[len(parts)-1]
+}
+
+// AppGroupID is the shared container for the iOS share extension.
+func AppGroupID(packageID string) string {
+	return "group." + packageID
 }
 
 func xmlAttr(s string) string {

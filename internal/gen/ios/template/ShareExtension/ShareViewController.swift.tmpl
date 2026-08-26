@@ -1,0 +1,118 @@
+import UIKit
+import UniformTypeIdentifiers
+import MobileCoreServices
+
+final class ShareViewController: UIViewController {
+    private let groupID = "{{.AppGroupID}}"
+    private let wakeURL = URL(string: "{{.WakeScheme}}://share-ready")!
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        Task { await forward() }
+    }
+
+    private func forward() async {
+        var files: [URL] = []
+        var texts: [String] = []
+        if let items = extensionContext?.inputItems as? [NSExtensionItem] {
+            for item in items {
+                for provider in item.attachments ?? [] {
+                    if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                        if let url = await loadURL(provider, UTType.fileURL.identifier) {
+                            files.append(url)
+                        }
+                    } else if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
+                        if let url = await loadURL(provider, UTType.url.identifier) {
+                            texts.append(url.absoluteString)
+                        }
+                    } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
+                        if let text = try? await provider.loadItem(forTypeIdentifier: UTType.plainText.identifier) as? String {
+                            texts.append(text)
+                        }
+                    } else if provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) {
+                        if let data = try? await provider.loadItem(forTypeIdentifier: UTType.data.identifier) as? Data {
+                            let name = provider.suggestedName ?? "share.bin"
+                            let dest = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+                            try? data.write(to: dest)
+                            files.append(dest)
+                        }
+                    }
+                }
+            }
+        }
+        stash(files: files, texts: texts)
+        _ = openURL(wakeURL)
+        extensionContext?.completeRequest(returningItems: nil)
+    }
+
+    private func loadURL(_ provider: NSItemProvider, _ type: String) async -> URL? {
+        if let url = try? await provider.loadItem(forTypeIdentifier: type) as? URL {
+            return url
+        }
+        if let url = try? await provider.loadItem(forTypeIdentifier: type) as? NSURL {
+            return url as URL
+        }
+        return nil
+    }
+
+    private func stash(files: [URL], texts: [String]) {
+        let destRoot = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID)
+            ?? FileManager.default.temporaryDirectory
+        let inbox = destRoot.appendingPathComponent("inbox", isDirectory: true)
+        try? FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        var paths: [String] = []
+        for url in files {
+            let dest = inbox.appendingPathComponent(UUID().uuidString + "-" + url.lastPathComponent)
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            try? FileManager.default.copyItem(at: url, to: dest)
+            if FileManager.default.fileExists(atPath: dest.path) {
+                paths.append(dest.path)
+            }
+        }
+        let openFile = destRoot.appendingPathComponent("open.jsonl")
+        if !paths.isEmpty {
+            append(openFile, ["kind": "files", "paths": paths])
+        }
+        for text in texts {
+            if text.contains("://") {
+                append(openFile, ["kind": "url", "url": text])
+            } else {
+                let dest = inbox.appendingPathComponent(UUID().uuidString + ".txt")
+                try? text.write(to: dest, atomically: true, encoding: .utf8)
+                append(openFile, ["kind": "files", "paths": [dest.path]])
+            }
+        }
+        if destRoot != FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) {
+            UIPasteboard.general.string = "eletrocromo-share"
+        }
+    }
+
+    private func append(_ file: URL, _ obj: [String: Any]) {
+        guard let raw = try? JSONSerialization.data(withJSONObject: obj),
+              var line = String(data: raw, encoding: .utf8)
+        else { return }
+        line += "\n"
+        if let h = try? FileHandle(forWritingTo: file) {
+            defer { try? h.close() }
+            _ = try? h.seekToEnd()
+            try? h.write(contentsOf: Data(line.utf8))
+            return
+        }
+        try? Data(line.utf8).write(to: file)
+    }
+
+    @discardableResult
+    private func openURL(_ url: URL) -> Bool {
+        var responder: UIResponder? = self
+        while let r = responder {
+            if let app = r as? UIApplication {
+                app.open(url)
+                return true
+            }
+            responder = r.next
+        }
+        extensionContext?.open(url, completionHandler: nil)
+        return true
+    }
+}

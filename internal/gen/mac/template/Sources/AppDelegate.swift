@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.restartServer()
         }
         win.show()
+        ShareWatch.start()
         startServer()
         NSApp.activate(ignoringOtherApps: true)
     }

@@ -22,6 +22,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         if let url = launchOptions?[.url] as? URL {
             OpenDrop.deliver([url])
         }
+        OpenDrop.drainIncoming()
+        ShareWatch.start()
         startServer()
         return true
     }

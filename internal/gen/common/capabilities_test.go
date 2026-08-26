@@ -66,4 +66,7 @@ func TestPlistFragments(t *testing.T) {
 	if !strings.Contains(d, "LSSupportsOpeningDocumentsInPlace") {
 		t.Fatalf("in-place:\n%s", d)
 	}
+	if !strings.Contains(d, "UTImportedTypeDeclarations") || !strings.Contains(d, "LSHandlerRank") {
+		t.Fatalf("imported/rank:\n%s", d)
+	}
 }
