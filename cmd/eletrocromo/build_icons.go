@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,4 +126,22 @@ func resolveIconIO(cwd, configPath, iconFlag, outputFlag string) (source, output
 		return resolveIconSource(cwd, "", baseDir, cfg.Icon), output, nil
 	}
 	return "", output, nil
+}
+
+// ensureBuildIcons returns a complete icon tree, generating when missing or refresh is set.
+func ensureBuildIcons(outw io.Writer, iconSrc, iconOut string, refresh bool) (string, error) {
+	if !refresh && icons.Complete(iconOut) {
+		_, err := fmt.Fprintf(outw, "eletrocromo: icons already present at %s\n", iconOut)
+		return iconOut, err
+	}
+	man, err := icons.Generate(icons.Options{
+		SourcePath: iconSrc,
+		OutputDir:  iconOut,
+		Force:      refresh || !icons.Complete(iconOut),
+	})
+	if err != nil {
+		return "", err
+	}
+	_, err = fmt.Fprintf(outw, "eletrocromo: icons → %s\n", man.OutputDir)
+	return man.OutputDir, err
 }

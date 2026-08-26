@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lewtec/eletrocromo/internal/icons"
 )
 
 func TestRoot_HelpListsBuild(t *testing.T) {
@@ -94,6 +96,41 @@ func TestResolveIconSource(t *testing.T) {
 	abs := filepath.Join(cwd, "abs.png")
 	if got = resolveIconSource(cwd, abs, base, "cfg.png"); got != abs {
 		t.Fatalf("abs flag: got %q want %q", got, abs)
+	}
+}
+
+func TestEnsureBuildIcons(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "icons")
+	var buf bytes.Buffer
+	root, err := ensureBuildIcons(&buf, "", out, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !icons.Complete(root) {
+		t.Fatalf("generated tree incomplete: %s", root)
+	}
+	if !strings.Contains(buf.String(), "icons →") {
+		t.Fatalf("generate log: %s", buf.String())
+	}
+
+	buf.Reset()
+	again, err := ensureBuildIcons(&buf, "", out, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != out {
+		t.Fatalf("reuse root: got %q want %q", again, out)
+	}
+	if !strings.Contains(buf.String(), "already present") {
+		t.Fatalf("reuse log: %s", buf.String())
+	}
+
+	buf.Reset()
+	if _, err := ensureBuildIcons(&buf, "", out, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "icons →") {
+		t.Fatalf("refresh log: %s", buf.String())
 	}
 }
 
