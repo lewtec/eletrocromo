@@ -88,7 +88,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, ErrMacOSRequired
 	}
 
-	workDir, ephemeral, err := resolveWorkDir(opts)
+	workDir, ephemeral, err := common.ResolveWorkDir(opts.WorkDir, "eletrocromo-macos-*")
 	if err != nil {
 		return nil, err
 	}
@@ -192,24 +192,6 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	result.AppPath = outApp
 	_, err = fmt.Fprintf(stdout, "eletrocromo: app → %s\n", outApp)
 	return result, err
-}
-
-func resolveWorkDir(opts BuildOptions) (workDir string, cleanup bool, err error) {
-	if strings.TrimSpace(opts.WorkDir) != "" {
-		abs, err := filepath.Abs(opts.WorkDir)
-		if err != nil {
-			return "", false, err
-		}
-		if err := os.MkdirAll(abs, 0o755); err != nil {
-			return "", false, err
-		}
-		return abs, false, nil
-	}
-	dir, err := os.MkdirTemp("", "eletrocromo-macos-*")
-	if err != nil {
-		return "", false, err
-	}
-	return dir, true, nil
 }
 
 func hostDarwinArch() (goarch, xcodeArch string, err error) {
@@ -332,4 +314,3 @@ func copyFile(src, dst string) error {
 	_, copyErr := io.Copy(out, in)
 	return errors.Join(copyErr, out.Close(), in.Close())
 }
-
