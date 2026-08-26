@@ -55,6 +55,7 @@ final class ServerProcess {
         env["ELETROCROMO_READY_FILE"] = readyFile.path
         env["NO_PROXY"] = "127.0.0.1,localhost,::1"
         env["no_proxy"] = "127.0.0.1,localhost,::1"
+        OpenDrop.applyEnv(&env)
         proc.environment = env
 
         let pipe = Pipe()

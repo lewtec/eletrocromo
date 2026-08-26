@@ -22,10 +22,12 @@ type Options struct {
 
 type templateData struct {
 	Config
-	Product    string
-	AppNameXML string
-	VersionXML string
-	CodeString string
+	Product            string
+	AppNameXML         string
+	VersionXML         string
+	CodeString         string
+	PlistURLTypes      string
+	PlistDocumentTypes string
 }
 
 // Create writes an ephemeral XcodeGen iOS host under opts.OutDir.
@@ -47,11 +49,13 @@ func Create(opts Options) error {
 	}
 
 	data := templateData{
-		Config:     cfg,
-		Product:    cfg.ProductName(),
-		AppNameXML: common.XMLEscape(cfg.AppName),
-		VersionXML: common.XMLEscape(cfg.VersionName),
-		CodeString: fmt.Sprintf("%d", cfg.VersionCode),
+		Config:             cfg,
+		Product:            cfg.ProductName(),
+		AppNameXML:         common.XMLEscape(cfg.AppName),
+		VersionXML:         common.XMLEscape(cfg.VersionName),
+		CodeString:         fmt.Sprintf("%d", cfg.VersionCode),
+		PlistURLTypes:      cfg.Capabilities.PlistURLTypes(cfg.PackageID),
+		PlistDocumentTypes: cfg.Capabilities.PlistDocumentTypes(),
 	}
 	if err := common.WalkTemplate(templateFS, data, out); err != nil {
 		return err

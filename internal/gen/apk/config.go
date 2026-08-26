@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lewtec/eletrocromo/internal/gen/common"
 )
 
 // Config / go_main validation sentinels.
@@ -34,15 +36,16 @@ var abiToGOARCH = map[string]string{
 
 // fileConfig is the on-disk JSON shape (schema_version included).
 type fileConfig struct {
-	SchemaVersion int      `json:"schema_version"`
-	PackageID     string   `json:"package_id"`
-	AppName       string   `json:"app_name"`
-	VersionName   string   `json:"version_name"`
-	VersionCode   int      `json:"version_code"`
-	GoMain        string   `json:"go_main"`
-	Icon          string   `json:"icon,omitempty"`
-	Generator     string   `json:"generator,omitempty"`
-	ABIs          []string `json:"abis,omitempty"`
+	SchemaVersion int             `json:"schema_version"`
+	PackageID     string          `json:"package_id"`
+	AppName       string          `json:"app_name"`
+	VersionName   string          `json:"version_name"`
+	VersionCode   int             `json:"version_code"`
+	GoMain        string          `json:"go_main"`
+	Icon          string          `json:"icon,omitempty"`
+	Generator     string          `json:"generator,omitempty"`
+	ABIs          []string        `json:"abis,omitempty"`
+	Capabilities  json.RawMessage `json:"capabilities,omitempty"`
 }
 
 // LoadConfig reads eletrocromo.json from path (file or directory containing it).
@@ -81,6 +84,11 @@ func LoadConfig(path string) (cfg Config, baseDir string, err error) {
 		Icon:        doc.Icon,
 		ABIs:        doc.ABIs,
 	}
+	caps, err := common.ParseCapabilities(doc.Capabilities)
+	if err != nil {
+		return Config{}, "", fmt.Errorf("%s: %w", file, err)
+	}
+	cfg.Capabilities = caps
 	return cfg, baseDir, nil
 }
 
@@ -107,6 +115,9 @@ func Merge(base, overlay Config) Config {
 	}
 	if len(overlay.ABIs) > 0 {
 		out.ABIs = append([]string(nil), overlay.ABIs...)
+	}
+	if !overlay.Capabilities.Empty() {
+		out.Capabilities = overlay.Capabilities
 	}
 	return out
 }
@@ -158,6 +169,13 @@ func encodeConfigJSON(cfg Config, generator string) ([]byte, error) {
 		Icon:          cfg.Icon,
 		Generator:     generator,
 		ABIs:          abis,
+	}
+	if !cfg.Capabilities.Empty() {
+		rawCaps, err := json.Marshal(cfg.Capabilities)
+		if err != nil {
+			return nil, err
+		}
+		doc.Capabilities = rawCaps
 	}
 	raw, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {

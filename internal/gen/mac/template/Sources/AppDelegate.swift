@@ -38,6 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         server.stop()
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        OpenDrop.deliver(urls)
+    }
+
     private func startServer() {
         window?.showSplash(status: "Starting server…", detail: nil, error: false)
         server.start(

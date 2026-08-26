@@ -19,7 +19,19 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         window.rootViewController = root
         window.makeKeyAndVisible()
         self.window = window
+        if let url = launchOptions?[.url] as? URL {
+            OpenDrop.deliver([url])
+        }
         startServer()
+        return true
+    }
+
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        OpenDrop.deliver([url])
         return true
     }
 

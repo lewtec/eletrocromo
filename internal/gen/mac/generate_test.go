@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lewtec/eletrocromo/internal/gen/common"
 )
 
 func TestCreate_WritesHost(t *testing.T) {
@@ -85,6 +87,39 @@ func TestCreate_WritesHost(t *testing.T) {
 	}
 	if !strings.Contains(string(ui), "arrow.clockwise") {
 		t.Fatalf("reload symbol missing:\n%s", ui)
+	}
+}
+
+func TestCreate_CapabilitiesPlist(t *testing.T) {
+	out := t.TempDir()
+	err := Create(Options{
+		OutDir: out,
+		Config: Config{
+			PackageID: "br.tec.lew.counter",
+			AppName:   "Counter",
+			GoMain:    ".",
+			Capabilities: common.Capabilities{
+				URL:   &common.URLCap{Schemes: []string{"myapp"}},
+				Files: &common.FilesCap{Types: []common.FileType{{Ext: ".md", MIME: "text/markdown"}}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plist, err := os.ReadFile(filepath.Join(out, "Info.plist"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps := string(plist)
+	if !strings.Contains(ps, "CFBundleURLTypes") || !strings.Contains(ps, "myapp") {
+		t.Fatalf("url types:\n%s", ps)
+	}
+	if !strings.Contains(ps, "CFBundleDocumentTypes") {
+		t.Fatalf("docs:\n%s", ps)
+	}
+	if _, err := os.Stat(filepath.Join(out, "Sources/OpenDrop.swift")); err != nil {
+		t.Fatal(err)
 	}
 }
 

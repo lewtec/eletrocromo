@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/lewtec/eletrocromo/driver/open"
 )
 
 // App acts as the core controller for the application, managing the lifecycle,
@@ -35,6 +36,9 @@ type App struct {
 	// Used by the Android WebView host (and tests). Also enabled when
 	// ELETROCROMO_NO_UI is 1/true/yes.
 	NoUI bool
+
+	// OnOpen receives URL/file launches (argv, ELETROCROMO_OPEN, Cache/open.jsonl).
+	OnOpen func(open.Event) error
 }
 
 // ReadyLinePrefix is printed once the loopback server is listening in NoUI mode.
@@ -195,6 +199,18 @@ func (a *App) Run() error {
 	}
 	link := fmt.Sprintf("%s/?token=%s", strings.TrimRight(base, "/"), a.AuthToken)
 	log.Printf("webserver started on %s", link)
+
+	go func() {
+		err := open.Listen(ctx, a.ID, func(ev open.Event) error {
+			if a.OnOpen == nil {
+				return nil
+			}
+			return a.OnOpen(ev)
+		})
+		if err != nil && ctx.Err() == nil {
+			log.Printf("open: %v", err)
+		}
+	}()
 
 	if noUI {
 		// Machine-parseable line on stdout without log timestamps (Android host).

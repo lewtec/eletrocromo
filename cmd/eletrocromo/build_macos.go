@@ -71,12 +71,13 @@ Example (from examples/counter):
 			iconOut := resolveIconOutput(cwd, iconOutput)
 
 			cfg := mac.Config{
-				PackageID:   apkCfg.PackageID,
-				AppName:     apkCfg.AppName,
-				VersionName: apkCfg.VersionName,
-				VersionCode: apkCfg.VersionCode,
-				GoMain:      apkCfg.GoMain,
-				Icon:        apkCfg.Icon,
+				PackageID:    apkCfg.PackageID,
+				AppName:      apkCfg.AppName,
+				VersionName:  apkCfg.VersionName,
+				VersionCode:  apkCfg.VersionCode,
+				GoMain:       apkCfg.GoMain,
+				Icon:         apkCfg.Icon,
+				Capabilities: apkCfg.Capabilities,
 			}
 
 			outApp := strings.TrimSpace(out)
