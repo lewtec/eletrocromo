@@ -97,23 +97,8 @@ Example (from examples/counter):
 			var iconRoot string
 
 			g.Go("icons", taskgroup.CPU, func(ctx context.Context, s *taskgroup.Status) error {
-				force := refresh
-				outw := cmd.OutOrStdout()
-				if !force && icons.Complete(iconOut) {
-					iconRoot = iconOut
-					_, err := fmt.Fprintf(outw, "eletrocromo: icons already present at %s\n", iconOut)
-					return err
-				}
-				man, err := icons.Generate(icons.Options{
-					SourcePath: iconSrc,
-					OutputDir:  iconOut,
-					Force:      force || !icons.Complete(iconOut),
-				})
-				if err != nil {
-					return err
-				}
-				iconRoot = man.OutputDir
-				_, err = fmt.Fprintf(outw, "eletrocromo: icons → %s\n", iconRoot)
+				var err error
+				iconRoot, err = ensureBuildIcons(cmd.OutOrStdout(), iconSrc, iconOut, refresh)
 				return err
 			})
 
