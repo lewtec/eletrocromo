@@ -40,7 +40,7 @@ object ShareOut {
             if (raf.length() < offset) offset = 0
             raf.seek(offset)
             var line: String?
-            while (raf.readLine().also { line = it } != nil) {
+            while (raf.readLine().also { line = it } != null) {
                 val raw = line ?: continue
                 val item = parse(raw) ?: continue
                 main.post { launch(ctx, item) }
