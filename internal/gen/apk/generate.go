@@ -6,18 +6,14 @@
 package apk
 
 import (
-	"bytes"
 	"embed"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
-	"text/template"
 
 	"github.com/lewtec/eletrocromo"
+	"github.com/lewtec/eletrocromo/internal/gen/common"
 	"github.com/lewtec/eletrocromo/internal/version"
 )
 
@@ -26,9 +22,9 @@ var templateFS embed.FS
 
 // Create / out-dir sentinels.
 var (
-	ErrOutDirRequired = errors.New("out dir is required")
-	ErrOutPathNotDir  = errors.New("out path exists and is not a directory")
-	ErrOutDirNotEmpty = errors.New("out dir is not empty (use --force)")
+	ErrOutDirRequired = common.ErrOutDirRequired
+	ErrOutPathNotDir  = common.ErrOutPathNotDir
+	ErrOutDirNotEmpty = common.ErrOutDirNotEmpty
 )
 
 // Config is the project identity written into the generated tree and
@@ -85,7 +81,7 @@ func Create(opts Options) error {
 	if err != nil {
 		return err
 	}
-	if err := prepareOutDir(out, opts.Force); err != nil {
+	if err := common.PrepareOutDir(out, opts.Force); err != nil {
 		return err
 	}
 
@@ -95,10 +91,18 @@ func Create(opts Options) error {
 		PackagePath:     strings.ReplaceAll(cfg.PackageID, ".", "/"),
 	}
 
-	if err := walkTemplate(data, out); err != nil {
+	if err := common.WalkTemplateDest(templateFS, data, out, data.kotlinDest); err != nil {
 		return err
 	}
 	return writeConfigJSON(out, cfg)
+}
+
+func (data templateData) kotlinDest(rel, destRel string) string {
+	if strings.HasPrefix(filepath.ToSlash(rel), "app/src/main/kotlin/") && strings.HasSuffix(rel, ".tmpl") {
+		base := strings.TrimSuffix(filepath.Base(rel), ".tmpl")
+		return filepath.Join("app", "src", "main", "java", data.PackagePath, base)
+	}
+	return destRel
 }
 
 func normalizeConfig(cfg Config) (Config, error) {
@@ -128,36 +132,6 @@ func normalizeConfig(cfg Config) (Config, error) {
 	return cfg, nil
 }
 
-func prepareOutDir(out string, force bool) error {
-	st, err := os.Stat(out)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return os.MkdirAll(out, 0o755)
-		}
-		return err
-	}
-	if !st.IsDir() {
-		return fmt.Errorf("%w: %s", ErrOutPathNotDir, out)
-	}
-	entries, err := os.ReadDir(out)
-	if err != nil {
-		return err
-	}
-	if len(entries) == 0 {
-		return nil
-	}
-	if !force {
-		return fmt.Errorf("%w: %s", ErrOutDirNotEmpty, out)
-	}
-	// Wipe contents but keep the directory node.
-	for _, e := range entries {
-		if err := os.RemoveAll(filepath.Join(out, e.Name())); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func rootProjectName(packageID, appName string) string {
 	// Prefer app name when it is a simple identifier; else last package label.
 	name := strings.TrimSpace(appName)
@@ -176,67 +150,6 @@ func rootProjectName(packageID, appName string) string {
 		name = parts[len(parts)-1]
 	}
 	return name
-}
-
-func walkTemplate(data templateData, out string) error {
-	return fs.WalkDir(templateFS, "template", func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel("template", p)
-		if err != nil {
-			return err
-		}
-		// Use slash paths from embed; convert for OS.
-		rel = filepath.FromSlash(rel)
-
-		raw, err := templateFS.ReadFile(p)
-		if err != nil {
-			return err
-		}
-
-		destRel, body, err := renderFile(rel, raw, data)
-		if err != nil {
-			return fmt.Errorf("%s: %w", p, err)
-		}
-
-		dest := filepath.Join(out, destRel)
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			return err
-		}
-		mode := fs.FileMode(0o644)
-		if strings.HasSuffix(dest, ".sh") {
-			mode = 0o755
-		}
-		return os.WriteFile(dest, body, mode)
-	})
-}
-
-func renderFile(rel string, raw []byte, data templateData) (destRel string, body []byte, err error) {
-	destRel = rel
-	// Kotlin sources: path under package ID + strip .tmpl
-	if strings.HasPrefix(filepath.ToSlash(rel), "app/src/main/kotlin/") && strings.HasSuffix(rel, ".tmpl") {
-		base := strings.TrimSuffix(filepath.Base(rel), ".tmpl")
-		destRel = filepath.Join("app", "src", "main", "java", data.PackagePath, base)
-	} else if strings.HasSuffix(rel, ".tmpl") {
-		destRel = strings.TrimSuffix(rel, ".tmpl")
-	}
-
-	// Binary-ish or pure static: still run through template if markers present.
-	// Always use text/template for consistency (templates are UTF-8 text).
-	name := path.Base(filepath.ToSlash(rel))
-	tmpl, err := template.New(name).Option("missingkey=error").Parse(string(raw))
-	if err != nil {
-		return "", nil, err
-	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", nil, err
-	}
-	return destRel, buf.Bytes(), nil
 }
 
 func writeConfigJSON(out string, cfg Config) error {

@@ -11,8 +11,15 @@ import (
 	"text/template"
 )
 
-// WalkTemplate copies src's template/ tree into out, rendering *.tmpl files.
+// WalkTemplate copies src's template/ tree into out, rendering *.tmpl files
+// and any other file whose body contains "{{".
 func WalkTemplate(src fs.FS, data any, out string) error {
+	return WalkTemplateDest(src, data, out, nil)
+}
+
+// WalkTemplateDest is WalkTemplate with an optional remapper for destRel
+// (Android kotlin sources live under a package-id path).
+func WalkTemplateDest(src fs.FS, data any, out string, dest func(rel, destRel string) string) error {
 	return fs.WalkDir(src, "template", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -33,21 +40,31 @@ func WalkTemplate(src fs.FS, data any, out string) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
-		dest := filepath.Join(out, destRel)
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		if dest != nil {
+			destRel = dest(rel, destRel)
+		}
+		pathOut := filepath.Join(out, destRel)
+		if err := os.MkdirAll(filepath.Dir(pathOut), 0o755); err != nil {
 			return err
 		}
-		return os.WriteFile(dest, body, 0o644)
+		mode := fs.FileMode(0o644)
+		if strings.HasSuffix(pathOut, ".sh") {
+			mode = 0o755
+		}
+		return os.WriteFile(pathOut, body, mode)
 	})
 }
 
-// RenderFile copies a static file or executes a *.tmpl body.
+// RenderFile copies a static file or executes a template body.
 func RenderFile(rel string, raw []byte, data any) (destRel string, body []byte, err error) {
 	destRel = rel
-	if !strings.HasSuffix(rel, ".tmpl") {
+	isTmpl := strings.HasSuffix(rel, ".tmpl")
+	if isTmpl {
+		destRel = strings.TrimSuffix(rel, ".tmpl")
+	}
+	if !isTmpl && !bytes.Contains(raw, []byte("{{")) {
 		return destRel, raw, nil
 	}
-	destRel = strings.TrimSuffix(rel, ".tmpl")
 	name := path.Base(filepath.ToSlash(rel))
 	tmpl, err := template.New(name).Option("missingkey=error").Parse(string(raw))
 	if err != nil {
