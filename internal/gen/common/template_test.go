@@ -11,6 +11,8 @@ func TestWalkTemplate_RendersAndCopies(t *testing.T) {
 	src := fstest.MapFS{
 		"template/Info.plist.tmpl": {Data: []byte(`<name>{{.Name}}</name>`)},
 		"template/static.txt":      {Data: []byte("keep")},
+		"template/settings.kts":    {Data: []byte(`name = "{{.Name}}"`)},
+		"template/scripts/run.sh":  {Data: []byte("#!/bin/sh\n")},
 	}
 	out := t.TempDir()
 	if err := WalkTemplate(src, struct{ Name string }{Name: "App"}, out); err != nil {
@@ -29,5 +31,42 @@ func TestWalkTemplate_RendersAndCopies(t *testing.T) {
 	}
 	if string(static) != "keep" {
 		t.Fatalf("static: %q", static)
+	}
+	kts, err := os.ReadFile(filepath.Join(out, "settings.kts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(kts) != `name = "App"` {
+		t.Fatalf("kts: %q", kts)
+	}
+	info, err := os.Stat(filepath.Join(out, "scripts/run.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Fatalf("run.sh not executable: %v", info.Mode())
+	}
+}
+
+func TestWalkTemplateDest_RemapsPath(t *testing.T) {
+	src := fstest.MapFS{
+		"template/app/src/main/kotlin/Main.kt.tmpl": {Data: []byte("package {{.Pkg}}\n")},
+	}
+	out := t.TempDir()
+	err := WalkTemplateDest(src, struct{ Pkg string }{Pkg: "br.tec.lew.x"}, out, func(rel, destRel string) string {
+		if rel == filepath.FromSlash("app/src/main/kotlin/Main.kt.tmpl") {
+			return filepath.Join("app", "src", "main", "java", "br", "tec", "lew", "x", "Main.kt")
+		}
+		return destRel
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(out, "app/src/main/java/br/tec/lew/x/Main.kt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "package br.tec.lew.x\n" {
+		t.Fatalf("body: %q", got)
 	}
 }
