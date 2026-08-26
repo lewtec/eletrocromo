@@ -101,7 +101,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, ErrDarwinRequired
 	}
 
-	workDir, ephemeral, err := resolveWorkDir(opts)
+	workDir, ephemeral, err := common.ResolveWorkDir(opts.WorkDir, "eletrocromo-ios-*")
 	if err != nil {
 		return nil, err
 	}
@@ -219,24 +219,6 @@ func normalizeSDK(sdk string) (string, error) {
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnknownSDK, s)
 	}
-}
-
-func resolveWorkDir(opts BuildOptions) (workDir string, cleanup bool, err error) {
-	if strings.TrimSpace(opts.WorkDir) != "" {
-		abs, err := filepath.Abs(opts.WorkDir)
-		if err != nil {
-			return "", false, err
-		}
-		if err := os.MkdirAll(abs, 0o755); err != nil {
-			return "", false, err
-		}
-		return abs, false, nil
-	}
-	dir, err := os.MkdirTemp("", "eletrocromo-ios-*")
-	if err != nil {
-		return "", false, err
-	}
-	return dir, true, nil
 }
 
 // SplashPointSize is the on-screen logo size (points) for the launch
@@ -419,4 +401,3 @@ func xcodeDestination(sdk string) (destination, productsDir string) {
 	}
 	return "generic/platform=iOS Simulator", "Debug-iphonesimulator"
 }
-
