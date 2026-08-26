@@ -194,6 +194,23 @@ class MainActivity : AppCompatActivity() {
         settings.displayZoomControls = false
 
         wv.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?,
+            ): Boolean {
+                val url = request?.url ?: return false
+                val host = url.host?.lowercase() ?: ""
+                if (host == "127.0.0.1" || host == "localhost" || host == "::1") {
+                    return false
+                }
+                return try {
+                    startActivity(Intent(Intent.ACTION_VIEW, url))
+                    true
+                } catch (_: Exception) {
+                    true
+                }
+            }
+
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 pageHadError = false
             }

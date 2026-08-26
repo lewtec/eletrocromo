@@ -63,4 +63,7 @@ func TestPlistFragments(t *testing.T) {
 	if !strings.Contains(d, "CFBundleDocumentTypes") || !strings.Contains(d, "md") {
 		t.Fatalf("docs:\n%s", d)
 	}
+	if !strings.Contains(d, "LSSupportsOpeningDocumentsInPlace") {
+		t.Fatalf("in-place:\n%s", d)
+	}
 }

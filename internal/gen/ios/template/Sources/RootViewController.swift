@@ -242,10 +242,7 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
             decisionHandler(.allow)
             return
         }
-        let scheme = url.scheme?.lowercased() ?? ""
-        if scheme == "http" || scheme == "https" {
-            UIApplication.shared.open(url)
-        }
+        Self.openExternal(url)
         decisionHandler(.cancel)
     }
 
@@ -255,11 +252,8 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        if let url = navigationAction.request.url, !Self.isLoopback(url) {
-            let scheme = url.scheme?.lowercased() ?? ""
-            if scheme == "http" || scheme == "https" {
-                UIApplication.shared.open(url)
-            }
+        if let url = navigationAction.request.url {
+            Self.openExternal(url)
         }
         return nil
     }
@@ -267,5 +261,12 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKUIDele
     private static func isLoopback(_ url: URL) -> Bool {
         let host = url.host?.lowercased() ?? ""
         return host == "127.0.0.1" || host == "localhost" || host == "::1"
+    }
+
+    private static func openExternal(_ url: URL) {
+        if isLoopback(url) { return }
+        let scheme = url.scheme?.lowercased() ?? ""
+        if scheme == "about" || scheme == "blob" { return }
+        UIApplication.shared.open(url)
     }
 }
