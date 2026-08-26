@@ -10,7 +10,12 @@
     "files": {
       "types": [
         { "ext": ".md", "mime": "text/markdown" },
-        { "ext": ".txt", "mime": "text/plain" }
+        { "ext": ".txt", "mime": "text/plain" },
+        { "ext": ".jpg", "mime": "image/jpeg" },
+        { "ext": ".png", "mime": "image/png" },
+        { "ext": ".gif", "mime": "image/gif" },
+        { "ext": ".webp", "mime": "image/webp" },
+        { "ext": ".heic", "mime": "image/heic" }
       ]
     }
   }

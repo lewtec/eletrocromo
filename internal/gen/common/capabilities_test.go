@@ -48,6 +48,11 @@ func TestAndroidIntentFilters(t *testing.T) {
 	if !strings.Contains(s, `android:mimeType="application/pdf"`) {
 		t.Fatalf("mime:\n%s", s)
 	}
+	img := Capabilities{Files: &FilesCap{Types: []FileType{{Ext: ".jpg", MIME: "image/jpeg"}}}}
+	is := img.AndroidIntentFilters()
+	if !strings.Contains(is, `android:mimeType="image/*"`) || !strings.Contains(is, "SEND_MULTIPLE") {
+		t.Fatalf("image share:\n%s", is)
+	}
 }
 
 func TestPlistFragments(t *testing.T) {

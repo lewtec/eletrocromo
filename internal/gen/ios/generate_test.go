@@ -243,6 +243,13 @@ func TestCreate_CapabilitiesPlist(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(out, "ShareExtension/ShareViewController.swift")); err != nil {
 		t.Fatal(err)
 	}
+	extPlist, err := os.ReadFile(filepath.Join(out, "ShareExtension/Info.plist"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(extPlist), "NSExtensionActivationSupportsImageWithMaxCount") {
+		t.Fatalf("image activation:\n%s", extPlist)
+	}
 	if _, err := os.Stat(filepath.Join(out, "Sources/OpenDrop.swift")); err != nil {
 		t.Fatal(err)
 	}

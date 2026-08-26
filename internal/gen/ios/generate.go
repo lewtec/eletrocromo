@@ -32,6 +32,7 @@ type templateData struct {
 	WakeScheme         string
 	AppGroupID         string
 	EmbedShare         bool
+	ShareActivationXML string
 }
 
 // Create writes an ephemeral XcodeGen iOS host under opts.OutDir.
@@ -65,6 +66,7 @@ func Create(opts Options) error {
 		WakeScheme:         cfg.Capabilities.WakeScheme(cfg.PackageID),
 		AppGroupID:         common.AppGroupID(cfg.PackageID),
 		EmbedShare:         cfg.Capabilities.Files != nil || cfg.Capabilities.Share != nil,
+		ShareActivationXML: cfg.Capabilities.ShareActivationXML(),
 	}
 	if err := common.WalkTemplate(templateFS, data, out); err != nil {
 		return err
