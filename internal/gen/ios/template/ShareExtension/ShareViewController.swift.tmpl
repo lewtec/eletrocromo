@@ -21,6 +21,12 @@ final class ShareViewController: UIViewController {
                         if let url = await loadURL(provider, UTType.fileURL.identifier) {
                             files.append(url)
                         }
+                    } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                        if let url = await loadURL(provider, UTType.image.identifier) {
+                            files.append(url)
+                        } else if let dest = await loadImageFile(provider) {
+                            files.append(dest)
+                        }
                     } else if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
                         if let url = await loadURL(provider, UTType.url.identifier) {
                             texts.append(url.absoluteString)
@@ -43,6 +49,22 @@ final class ShareViewController: UIViewController {
         stash(files: files, texts: texts)
         _ = openURL(wakeURL)
         extensionContext?.completeRequest(returningItems: nil)
+    }
+
+    private func loadImageFile(_ provider: NSItemProvider) async -> URL? {
+        if let img = try? await provider.loadItem(forTypeIdentifier: UTType.image.identifier) as? UIImage,
+           let data = img.jpegData(compressionQuality: 0.92)
+        {
+            let dest = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
+            try? data.write(to: dest)
+            return dest
+        }
+        if let data = try? await provider.loadItem(forTypeIdentifier: UTType.image.identifier) as? Data {
+            let dest = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
+            try? data.write(to: dest)
+            return dest
+        }
+        return nil
     }
 
     private func loadURL(_ provider: NSItemProvider, _ type: String) async -> URL? {

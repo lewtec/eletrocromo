@@ -26,16 +26,36 @@ object OpenDrop {
                 }
             }
             Intent.ACTION_SEND -> {
-                val uri = if (Build.VERSION.SDK_INT >= 33) {
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM)
-                } ?: return
+                val uri = streamUri(intent) ?: return
                 val path = materialize(ctx, uri) ?: return
                 append(ctx, """{"kind":"files","paths":[${jsonStr(path)}]}""")
             }
+            Intent.ACTION_SEND_MULTIPLE -> {
+                val uris = streamUris(intent)
+                val paths = uris.mapNotNull { materialize(ctx, it) }
+                if (paths.isEmpty()) return
+                append(ctx, """{"kind":"files","paths":[${paths.joinToString(",") { jsonStr(it) }}]}""")
+            }
         }
+    }
+
+    private fun streamUri(intent: Intent): Uri? {
+        return if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+    }
+
+    private fun streamUris(intent: Intent): List<Uri> {
+        val list = if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+        }
+        return list ?: emptyList()
     }
 
     private fun isCustomScheme(uri: Uri): Boolean {

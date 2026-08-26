@@ -154,17 +154,49 @@ func (c Capabilities) AndroidIntentFilters() string {
 		}
 	}
 	if c.Files != nil {
+		mimes := make([]string, 0, len(c.Files.Types)+2)
+		seen := map[string]struct{}{}
+		add := func(m string) {
+			if _, ok := seen[m]; ok {
+				return
+			}
+			seen[m] = struct{}{}
+			mimes = append(mimes, m)
+		}
 		for _, ft := range c.Files.Types {
+			add(ft.MIME)
+			if typ, _, ok := strings.Cut(ft.MIME, "/"); ok && typ != "" && typ != "*" {
+				add(typ + "/*")
+			}
+		}
+		for _, mime := range mimes {
 			b.WriteString(`
         <intent-filter>
             <action android:name="android.intent.action.VIEW" />
             <action android:name="android.intent.action.SEND" />
+            <action android:name="android.intent.action.SEND_MULTIPLE" />
             <category android:name="android.intent.category.DEFAULT" />
-            <data android:mimeType="` + xmlAttr(ft.MIME) + `" />
+            <data android:mimeType="` + xmlAttr(mime) + `" />
         </intent-filter>
 `)
 		}
 	}
+	return b.String()
+}
+
+// ShareActivationXML is the NSExtensionActivationRule dict body.
+func (c Capabilities) ShareActivationXML() string {
+	var b strings.Builder
+	b.WriteString("\t\t\t\t<key>NSExtensionActivationSupportsFileWithMaxCount</key>\n")
+	b.WriteString("\t\t\t\t<integer>20</integer>\n")
+	b.WriteString("\t\t\t\t<key>NSExtensionActivationSupportsImageWithMaxCount</key>\n")
+	b.WriteString("\t\t\t\t<integer>20</integer>\n")
+	b.WriteString("\t\t\t\t<key>NSExtensionActivationSupportsMovieWithMaxCount</key>\n")
+	b.WriteString("\t\t\t\t<integer>8</integer>\n")
+	b.WriteString("\t\t\t\t<key>NSExtensionActivationSupportsText</key>\n")
+	b.WriteString("\t\t\t\t<true/>\n")
+	b.WriteString("\t\t\t\t<key>NSExtensionActivationSupportsWebURLWithMaxCount</key>\n")
+	b.WriteString("\t\t\t\t<integer>8</integer>\n")
 	return b.String()
 }
 
@@ -221,6 +253,9 @@ func (c Capabilities) PlistDocumentTypes() string {
 		b.WriteString("</string>\n")
 		if strings.HasPrefix(ft.MIME, "text/") && uti != "public.text" {
 			b.WriteString("\t\t\t\t<string>public.text</string>\n")
+		}
+		if strings.HasPrefix(ft.MIME, "image/") && uti != "public.image" {
+			b.WriteString("\t\t\t\t<string>public.image</string>\n")
 		}
 		b.WriteString("\t\t\t</array>\n")
 		b.WriteString("\t\t</dict>\n")
@@ -302,6 +337,14 @@ func utiFor(mime string) string {
 		return "public.png"
 	case "image/jpeg", "image/jpg":
 		return "public.jpeg"
+	case "image/gif":
+		return "public.gif"
+	case "image/heic", "image/heif":
+		return "public.heic"
+	case "image/webp":
+		return "org.webmproject.webp"
+	case "image/*":
+		return "public.image"
 	default:
 		return "public.data"
 	}
