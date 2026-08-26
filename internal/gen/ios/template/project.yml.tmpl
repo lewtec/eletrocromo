@@ -17,6 +17,7 @@ settings:
     ENABLE_BITCODE: NO
     ENABLE_DEBUG_DYLIB: NO
     SWIFT_OBJC_BRIDGING_HEADER: Sources/eletrocromo-Bridging-Header.h
+    CODE_SIGN_ENTITLEMENTS: App.entitlements
     OTHER_LDFLAGS: $(inherited) -leletrocromo -lresolv -framework CoreFoundation -framework Security
     LIBRARY_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/lib
     HEADER_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/lib
@@ -39,3 +40,30 @@ targets:
         CURRENT_PROJECT_VERSION: "{{.CodeString}}"
         INFOPLIST_KEY_CFBundleDisplayName: "{{.AppName}}"
         INFOPLIST_KEY_LSRequiresIPhoneOS: YES
+{{- if .EmbedShare}}
+    dependencies:
+      - target: {{.ShareProduct}}
+        embed: true
+        codeSign: false
+  {{.ShareProduct}}:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+        excludes:
+          - Info.plist
+          - "*.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: {{.PackageID}}.share
+        PRODUCT_NAME: {{.ShareProduct}}
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGN_ENTITLEMENTS: ShareExtension/Share.entitlements
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+{{- end}}

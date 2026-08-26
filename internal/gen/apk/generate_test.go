@@ -130,6 +130,16 @@ func TestCreate_CapabilitiesIntentFilters(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(out, "app/src/main/java/br/tec/lew/counter/OpenDrop.kt")); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := os.Stat(filepath.Join(out, "app/src/main/java/br/tec/lew/counter/ShareOut.kt")); err != nil {
+		t.Fatal(err)
+	}
+	man, err := os.ReadFile(filepath.Join(out, "app/src/main/AndroidManifest.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(man), "FileProvider") {
+		t.Fatalf("FileProvider:\n%s", man)
+	}
 }
 
 func TestCreate_RejectsBadID(t *testing.T) {

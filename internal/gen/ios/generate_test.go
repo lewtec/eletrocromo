@@ -94,6 +94,9 @@ func TestCreate_WritesHost(t *testing.T) {
 	if !strings.Contains(s, "LaunchScreen.storyboard") {
 		t.Fatalf("launch storyboard missing from project:\n%s", s)
 	}
+	if strings.Contains(s, "type: app-extension") {
+		t.Fatalf("share extension should be off without files:\n%s", s)
+	}
 
 	plist, err := os.ReadFile(filepath.Join(out, "Info.plist"))
 	if err != nil {
@@ -226,6 +229,19 @@ func TestCreate_CapabilitiesPlist(t *testing.T) {
 	}
 	if !strings.Contains(ps, "CFBundleDocumentTypes") {
 		t.Fatalf("docs:\n%s", ps)
+	}
+	if !strings.Contains(ps, "UTImportedTypeDeclarations") || !strings.Contains(ps, "LSHandlerRank") {
+		t.Fatalf("uti:\n%s", ps)
+	}
+	yml, err := os.ReadFile(filepath.Join(out, "project.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(yml), "type: app-extension") {
+		t.Fatalf("share extension missing:\n%s", yml)
+	}
+	if _, err := os.Stat(filepath.Join(out, "ShareExtension/ShareViewController.swift")); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(out, "Sources/OpenDrop.swift")); err != nil {
 		t.Fatal(err)

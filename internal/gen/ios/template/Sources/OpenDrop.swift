@@ -22,9 +22,13 @@ enum OpenDrop {
     }
 
     static func deliver(_ urls: [URL]) {
+        if urls.contains(where: { $0.host == "share-ready" }) {
+            drainIncoming()
+        }
         guard !urls.isEmpty else { return }
         var files: [String] = []
         for url in urls {
+            if url.host == "share-ready" { continue }
             let scheme = url.scheme?.lowercased() ?? ""
             if scheme != "http", scheme != "https", scheme != "file" {
                 append(jsonLine(kind: "url", url: url.absoluteString, paths: nil))
@@ -37,6 +41,24 @@ enum OpenDrop {
         if !files.isEmpty {
             append(jsonLine(kind: "files", url: nil, paths: files))
         }
+    }
+
+    static func drainIncoming() {
+        let groupID = "group." + (Bundle.main.bundleIdentifier ?? "")
+        guard let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) else {
+            return
+        }
+        let src = root.appendingPathComponent("open.jsonl")
+        guard let data = try? Data(contentsOf: src), !data.isEmpty else { return }
+        let dest = cacheDir().appendingPathComponent("open.jsonl")
+        if let h = try? FileHandle(forWritingTo: dest) {
+            defer { try? h.close() }
+            _ = try? h.seekToEnd()
+            try? h.write(contentsOf: data)
+        } else {
+            try? data.write(to: dest)
+        }
+        try? FileManager.default.removeItem(at: src)
     }
 
     private static func materialize(_ url: URL) -> String? {
