@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/lewtec/eletrocromo/internal/gen/common"
 	"github.com/lewtec/eletrocromo/internal/icons"
 	"github.com/lewtec/eletrocromo/internal/version"
 )
@@ -184,7 +185,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		buildErr = err
 		return nil, buildErr
 	}
-	if err := replaceDir(built, outApp); err != nil {
+	if err := common.ReplaceDir(built, outApp); err != nil {
 		buildErr = fmt.Errorf("copy app: %w", err)
 		return nil, buildErr
 	}
@@ -332,41 +333,3 @@ func copyFile(src, dst string) error {
 	return errors.Join(copyErr, out.Close(), in.Close())
 }
 
-func replaceDir(src, dst string) error {
-	if err := os.RemoveAll(dst); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	// Rename when same device; fall back to recursive copy.
-	if err := os.Rename(src, dst); err == nil {
-		return nil
-	}
-	return copyDir(src, dst)
-}
-
-func copyDir(src, dst string) error {
-	return filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, p)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		raw, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, raw, info.Mode())
-	})
-}
