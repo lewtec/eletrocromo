@@ -59,9 +59,8 @@ func (i Info) String() string {
 	return strings.Join(parts, " ")
 }
 
-// Resolve returns CLI/binary version from -X vars, then buildinfo VCS,
-// then git in the current working directory (local `go run` convenience).
-func Resolve() Info {
+// stampedFromLdflags returns Info from -X package vars (Version defaults to "devel").
+func stampedFromLdflags() Info {
 	info := Info{
 		Version: strings.TrimSpace(Version),
 		Commit:  strings.TrimSpace(Commit),
@@ -71,6 +70,13 @@ func Resolve() Info {
 	if info.Version == "" {
 		info.Version = "devel"
 	}
+	return info
+}
+
+// Resolve returns CLI/binary version from -X vars, then buildinfo VCS,
+// then git in the current working directory (local `go run` convenience).
+func Resolve() Info {
+	info := stampedFromLdflags()
 	fillFromBuildInfo(&info)
 	if cwd, err := osGetwd(); err == nil {
 		fillFromGit(&info, cwd)
@@ -81,15 +87,7 @@ func Resolve() Info {
 // ResolveDir is like Resolve but prefers git metadata from dir (app module root).
 // Use this when stamping an APK for a specific project tree.
 func ResolveDir(dir string) Info {
-	info := Info{
-		Version: strings.TrimSpace(Version),
-		Commit:  strings.TrimSpace(Commit),
-		Date:    strings.TrimSpace(Date),
-		BuiltBy: strings.TrimSpace(BuiltBy),
-	}
-	if info.Version == "" {
-		info.Version = "devel"
-	}
+	info := stampedFromLdflags()
 	fillFromBuildInfo(&info)
 	fillFromGit(&info, dir)
 	return info
@@ -212,9 +210,13 @@ func (i Info) AndroidCode() int {
 // AndroidCodeFrom maps version (+ optional git commit count) to versionCode.
 func AndroidCodeFrom(version string, gitCommitCount int) int {
 	if m := semverCore.FindStringSubmatch(strings.TrimSpace(version)); len(m) == 4 {
-		maj, _ := strconv.Atoi(m[1])
-		min, _ := strconv.Atoi(m[2])
-		pat, _ := strconv.Atoi(m[3])
+		// Regex already matched digits; Atoi cannot fail for these groups.
+		maj, errMaj := strconv.Atoi(m[1])
+		min, errMin := strconv.Atoi(m[2])
+		pat, errPat := strconv.Atoi(m[3])
+		if errMaj != nil || errMin != nil || errPat != nil {
+			return 1
+		}
 		// Cap components so we stay in a reasonable int range.
 		if maj > 2099 {
 			maj = 2099

@@ -17,6 +17,9 @@ import (
 
 const testAppID = "br.tec.lew.test"
 
+// ErrFakeExit stands in for a process exit status in wrapHeliumExit tests.
+var ErrFakeExit = errors.New("exit status 1")
+
 func TestRedactSecretsInText_StripsTokenQuery(t *testing.T) {
 	secret := "deadbeef-cafe-babe-0000-111122223333"
 	in := fmt.Sprintf(
@@ -38,7 +41,7 @@ func TestRedactSecretsInText_StripsTokenQuery(t *testing.T) {
 func TestWrapHeliumExit_RedactsTokenFromStderr(t *testing.T) {
 	secret := "session-secret-do-not-leak"
 	stderr := "Chromium: --app=http://127.0.0.1:9/?token=" + secret + " crashed"
-	err := wrapHeliumExit(fmt.Errorf("exit status 1"), stderr)
+	err := wrapHeliumExit(stderr, ErrFakeExit)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -71,8 +74,8 @@ func TestLaunchChromium_RejectsNonHTTPSchemes(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error for non-http(s) scheme")
 			}
-			if !strings.Contains(err.Error(), "invalid URL scheme") {
-				t.Fatalf("expected scheme error, got %v", err)
+			if !errors.Is(err, ErrInvalidURLScheme) {
+				t.Fatalf("expected ErrInvalidURLScheme, got %v", err)
 			}
 		})
 	}
@@ -143,7 +146,8 @@ func TestResolveBrowserHost_NoEnsureNoHost(t *testing.T) {
 	if !errors.Is(err, ErrNoChromium) {
 		t.Fatalf("want ErrNoChromium, got %v", err)
 	}
-	if strings.Contains(err.Error(), "xdg-open") || strings.Contains(strings.ToLower(err.Error()), "system browser") {
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "xdg-open") || strings.Contains(msg, "system browser") {
 		t.Fatalf("must not mention system browser fallback: %v", err)
 	}
 }

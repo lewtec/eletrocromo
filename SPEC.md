@@ -2,21 +2,21 @@
 
 CGo-less Go library: run a local web UI on loopback (auth always on) and surface it in a dumb window. Not Electron. Not Wails. Not a native widget toolkit.
 
-Status: approved (grill sessions 2026-07-20 desktop shell; 2026-07-23 app icons / packaging CLI). This document is the expectation contract. Implementation may lag checklists.
+Status: approved (grill sessions 2026-07-20 desktop shell; 2026-07-23 app icons / packaging CLI; 2026-08-22 macOS `.app` packaging). This document is the expectation contract. Implementation may lag checklists.
 
 ## One-liner
 
-A pure-Go process owns the HTTP app; eletrocromo binds loopback, gates access, opens a **Helium** (Chromium-based) `--app` window, and on Linux can keep the process alive and reopen the UI from the system tray. A separate **packaging CLI** (`cmd/eletrocromo`) scaffolds Android hosts JIT and generates multi-platform **app icons** from one master image.
+A pure-Go process owns the HTTP app; eletrocromo binds loopback, gates access, opens a **Helium** (Chromium-based) `--app` window, and on Linux can keep the process alive and reopen the UI from the system tray. A separate **packaging CLI** (`cmd/eletrocromo`) generates multi-platform **app icons**, scaffolds Android hosts JIT into an APK, and scaffolds macOS hosts JIT into an unsigned Debug `.app`.
 
 ## Goals
 
 - Ship desktop apps as **CGo-less Go binaries** whose UI is a normal webapp talking to a **server on the same device**.
 - Let the app focus on an `http.Handler` or `*http.Server`; the library handles bind, auth handshake, window launch, and process lifetime modes.
 - On **Linux (v1 bar)**: window-owned lifetime by default; optional background mode with **tray Open/Quit** so the user never retypes a token URL.
-- Stay thin: the window is **Helium only**, not a native toolkit and not “whatever Chromium is on PATH.”
+- Stay thin: on desktop `Run()`, the window is **Helium only**, not a native toolkit and not “whatever Chromium is on PATH.” Packaged Android/macOS hosts use the OS WebView.
 - Prefer **[Helium](https://helium.computer/)** as the desktop shell: privacy-oriented Chromium fork that still supports `--app` app windows.
 - **Ensure** Helium when missing via **[workspaced](https://github.com/lucasew/workspaced)** (registry tool `helium-browser`), including bootstrapping the workspaced binary if needed — without vendoring browser blobs in this module.
-- **Packaging CLI** (not the runtime library): generate a full **icon matrix** from one PNG/SVG (or a shipped default mark) and build **Android APKs** via JIT host scaffold + attached Go binary; leave GoReleaser/installer wiring to the app author (documented recipes).
+- **Packaging CLI** (not the runtime library): generate a full **icon matrix** from one PNG/SVG (or a shipped default mark) and build **Android APKs** and **macOS `.app` bundles** via JIT host scaffold + attached Go binary. Leave DMG, notarization, PE embedding, and GoReleaser installer wiring to later tracks or the app author.
 
 ## Non-goals
 
@@ -29,17 +29,18 @@ Not this library’s job (now or as “quiet scope creep”):
 | JS ↔ Go IPC bridge beyond ordinary HTTP/WebSocket | Would become Wails |
 | Vendoring Helium/Chromium **inside the eletrocromo module** | Ensure uses workspaced’s tool store + registry, not a copy of the browser in-tree |
 | Importing workspaced into the **runtime library** used at `App.Run()` | Helium ensure stays **subprocess** to the workspaced binary (stable boundary). Packaging CLI may import workspaced packages (e.g. `taskgroup`) |
-| Auto-updater, full installer product, mandatory PE/`.app` embedding | Distribution is separate; icon **generator + docs**, not a complete release product |
+| Auto-updater, full installer product, mandatory PE embedding | Distribution is separate. JIT `build macos` is the Mac packaging product; DMG/notarization are not v1 |
 | Frontend framework or SPA opinions | App serves whatever it wants |
 | Multi-window platform APIs | Out of scope |
 | LAN / non-loopback bind as a happy path | Same-device only |
 | Optional “no auth” mode | Auth always on |
 | CGo in core, tray, or required **runtime** deps | Non-negotiable for library/apps at run time |
 | Win/mac tray/lifecycle parity in v1 | Linux-first |
-| Forcing Android SDK / CGo into the **importable desktop library** | APK tooling lives in `cmd/eletrocromo` + `internal/apkgen` (and icon code), not in `Run()` |
+| Forcing Android SDK / Xcode / CGo into the **importable desktop library** | APK and `.app` tooling live in `cmd/eletrocromo` + `internal/…` (and icon code), not in `Run()` |
+| Vendoring a prebuilt Mach-O host stub | Ephemeral Xcode compile on a Mac; no stub releases in this module |
 | Firefox (or other non-Chromium) as app window | No `--app`-style borderless/PWA window mode |
 | Emulating app windows via Firefox extensions / profiles | Out of scope |
-| System default browser fallback | Full browser chrome; may be Firefox; not an app window — **removed** |
+| System default browser as the **desktop `Run()` window** | Full browser chrome; may be Firefox; not an app window — **removed**. Packaged Mac WKWebView may open **off-loopback** http(s) in the default browser; that is not the app window |
 | Depending on home `lazy_tools` / personal cue aliases | Registry name only so any workspaced install works |
 | Runtime icon conversion inside `App.Run()` | Icons are a packaging concern |
 | GoReleaser plugin ABI | Hooks + documented YAML only |
@@ -88,7 +89,9 @@ Runtime library and packaging CLI share a repo but **different dependency rules*
 │       ▲                                                     │
 │       │ missing / --refresh-icons                           │
 │  build android ──► JIT Gradle host + jniLibs + APK          │
-│       │            (mipmaps from icon tree)                 │
+│  build macos   ──► JIT XcodeGen host + darwin Go + .app     │
+│  build ios     ──► JIT XcodeGen host + ios c-archive + .app │
+│       │            (icns / mipmaps from icon tree)          │
 │       └── taskgroup orchestration (workspaced import OK)    │
 │                                                             │
 │  Config: eletrocromo.json (package_id, icon, …) + flags     │
@@ -104,6 +107,19 @@ APK is a **wrapper**, not a second app architecture:
 - Same mental model: webapp ↔ on-device server
 
 Scaffold is **just-in-time** during `build android` (no happy-path “create host project and commit it”). Must not force CGo or Android SDK into the **importable desktop library**.
+
+### macOS `.app` (wrapper architecture)
+
+`.app` is a **wrapper**, not a second app architecture and not a Helium bundle:
+
+- WKWebView for UI
+- The host **runs the same Go app** (`ELETROCROMO_NO_UI=1`) on loopback
+- Same handshake as Android: `ELETROCROMO_READY` on stdout and/or `ELETROCROMO_READY_FILE`
+- Same mental model: webapp ↔ on-device server
+
+Desktop `App.Run()` from a terminal still uses **Helium only**. The packaged `.app` does not launch Helium.
+
+Scaffold is **just-in-time** during `build macos` (ephemeral XcodeGen + Swift host). No happy-path “create host project and commit it”. Must not force Xcode, CGo, or a vendored Mach-O into the **importable desktop library**.
 
 ## Public contract
 
@@ -233,8 +249,10 @@ Tray and lifecycle must work **without CGo**. If a approach requires CGo, it is 
 | Platform | Desktop runtime (v1 bar) | Packaging / icons |
 |----------|--------------------------|-------------------|
 | **Linux** | Full vision: bind, auth, launch, both lifetime modes, tray Open/Quit, docs, dogfood example | Icon matrix; desktop package recipes documented (nFPM/Snap/etc. are user-wired) |
-| **Windows / macOS** | Best-effort later; launching UI + server may work; no tray/lifecycle parity promise | Icon matrix includes `.ico` / `.icns`; PE/`.app` embedding left to user/GR (Pro app_bundles documented) |
+| **Windows** | Best-effort later; launching UI + server may work; no tray/lifecycle parity promise | Icon matrix includes `.ico`; PE embedding left to user/GR |
+| **macOS** | Best-effort Helium `Run()`; no tray/lifecycle parity promise | Icon matrix includes `.icns`; **`build macos`** JIT unsigned Debug `.app` (WKWebView host) |
 | **Android** | N/A (not Helium desktop) | APK via packaging CLI; launcher mipmaps from icon pipeline |
+| **iOS / iPadOS** | N/A (not Helium desktop) | Scaffold: `build ios` JIT Debug `.app` (WKWebView + in-process c-archive). Not grilled. |
 
 ## v1 done checklist (Linux desktop runtime)
 
@@ -251,21 +269,22 @@ v1 **desktop library** is **complete** when all of the following hold:
 9. **Dogfood example:** counter UI with Go `html/template` (see below).
 10. **CGo-less:** `go build` with CGO disabled succeeds for the library and example on Linux.
 
-**Not required for desktop v1:** Win/mac tray, native dialogs, bundled browser, icon/APK packaging (those are the packaging track below).
+**Not required for desktop v1:** Win/mac tray, native dialogs, bundled browser, icon/APK/`.app` packaging (those are the packaging track below).
 
-## Packaging track checklist (icons + Android)
+## Packaging track checklist (icons + Android + macOS)
 
 Separate from desktop tray/lifetime. Complete when:
 
-1. **Default assets:** vendored square **mark** + **lockup** in-repo; generator never depends on ephemeral paths.
+1. **Default assets:** vendored **lockup** (RGBA, no canvas) in-repo; square **mark** is cropped from it at generate time; generator never depends on ephemeral paths.
 2. **`eletrocromo build`:** bare invocation errors and lists targets.
 3. **`build icons`:** one master (config/`--icon`/default) → full `dist/icons` tree + `manifest.json`; pad+center; `--output`; `--refresh-icons`.
 4. **`build android`:** JIT scaffold + multiarch Go + APK; runs icons when outputs missing (or `--refresh-icons`); mipmaps applied in workdir.
-5. **Config:** `icon` field on `eletrocromo.json`; flags override.
-6. **Conversion:** Go libs preferred; workspaced ensure for missing tools; fail closed.
-7. **Orchestration:** workspaced `taskgroup` (or equivalent imported API) for named deps.
-8. **Docs:** GoReleaser OSS hooks + Pro `app_bundles.icon` / nFPM/Snap recipes; users wire embedding.
-9. **Deprecate or demote** happy-path `android create` (JIT build is the product).
+5. **`build macos`:** JIT XcodeGen + Swift host + host-arch darwin Go + unsigned Debug `.app`; runs icons when `macos/icon.icns` is missing (or `--refresh-icons`); `--go-only` skips `xcodebuild`.
+6. **Config:** `icon` field on `eletrocromo.json`; flags override; **no Mac-only json keys** in v1.
+7. **Conversion:** Go libs preferred; workspaced ensure for missing tools; fail closed.
+8. **Orchestration:** workspaced `taskgroup` (or equivalent imported API) for named deps.
+9. **Docs:** GoReleaser OSS hooks + Pro `app_bundles.icon` / nFPM/Snap recipes; users wire embedding. `build macos` is the happy-path `.app`; DMG is not.
+10. **Deprecate or demote** happy-path `android create` (JIT build is the product).
 
 ## Dogfood example
 
@@ -323,7 +342,7 @@ Product decision for **apps built with eletrocromo**, not primarily for branding
 
 ### Product goals
 
-- Ship a **default logo** (eletrocromo brand): square **mark** for the icon pipeline; full **lockup** (mark + wordmark) for marketing/docs only.
+- Ship a **default logo** (eletrocromo brand): full **lockup** (mark + wordmark) vendored as RGBA; square **mark** is cropped from it when generating the icon matrix. Lockup stays for marketing/docs.
 - App authors supply **one** master **PNG or SVG** (`icon` in `eletrocromo.json` or `--icon`); tooling **rasterizes and generates** all platform artifacts.
 - Cover **Windows, macOS, Linux, Android, and web** favicon surfaces in the output tree.
 - **Pad + center** non-square masters (letterbox; transparency when the format allows).
@@ -331,7 +350,7 @@ Product decision for **apps built with eletrocromo**, not primarily for branding
 ### Feature non-goals
 
 - Embedding icons at **`App.Run()`** / runtime conversion.
-- Auto-wiring PE resources, macOS bundles, or nFPM as a mandatory pipeline (document recipes only).
+- Auto-wiring PE resources or nFPM as a mandatory pipeline (document recipes only). JIT `build macos` **is** the `.app` product; GoReleaser Pro `app_bundles` remains optional docs.
 - Content-hash auto-invalidation of icons (v1 of this track).
 - Neutral non-brand default (default **is** the eletrocromo mark).
 - True GoReleaser “plugin” ABI — use **hooks + documented YAML**.
@@ -342,8 +361,8 @@ Product decision for **apps built with eletrocromo**, not primarily for branding
 |-------|------|
 | Config | `icon` in `eletrocromo.json` (path relative to config dir) |
 | Flag | `--icon` overrides config (full word; no short `-i`) |
-| Missing both | Use **embedded default mark** (vendored asset; never a live `/tmp/…` path) |
-| Lockup | Separate vendored asset for README/site; **not** used for 16×16 / mipmaps |
+| Missing both | Crop the **embedded default lockup** to a square mark (vendored asset; never a live `/tmp/…` path) |
+| Lockup | Vendored RGBA source for README/site **and** the default icon pipeline |
 
 ### Output tree
 
@@ -369,10 +388,14 @@ dist/icons/
 ### CLI shape (`cmd/eletrocromo`)
 
 ```text
-eletrocromo build              → error; list targets (icons, android, …)
+eletrocromo build              → error; list targets (icons, android, macos, …)
 eletrocromo build icons        → write the icon tree
 eletrocromo build android      → JIT scaffold + cross-compile Go + APK;
                                  runs icons first if outputs missing
+eletrocromo build macos        → JIT XcodeGen + Swift host + darwin Go + .app;
+                                 runs icons first if macos/icon.icns is missing
+eletrocromo build ios          → JIT XcodeGen + UIKit host + GOOS=ios c-archive + .app;
+                                 scaffold (not grilled); READY file only; Mac + Xcode
 ```
 
 | Flag / behavior | Rule |
@@ -381,8 +404,8 @@ eletrocromo build android      → JIT scaffold + cross-compile Go + APK;
 | `--icon` | Master image path |
 | `--output` | Icon tree root (default `dist/icons`) |
 | `--refresh-icons` | Force full icon regen; without it, generate only when **expected outputs are missing** |
-| Scaffold | **Just-in-time** for android (no happy-path `create` / commit host project) |
-| Orchestration | **workspaced `taskgroup`** (named tasks, deps: icons → android steps) |
+| Scaffold | **Just-in-time** for android, macos, and ios (no happy-path `create` / commit host project) |
+| Orchestration | **workspaced `taskgroup`** (named tasks, deps: icons → android/macos/ios steps) |
 
 Migrate existing `eletrocromo android build` / `android create` to the `build …` surface; `create` is not the product path and may be removed after migration.
 
@@ -397,6 +420,53 @@ Migrate existing `eletrocromo android build` / `android create` to the `build �
 - JIT host already used by android build; icon step must feed **mipmaps** (and related) into that workdir when building APKs.
 - Reuse the same generator as `build icons` (shared code under `internal/…`, not the public runtime API).
 
+### macOS packaging (normative; grill 2026-08-22)
+
+Same wrapper idea as the APK. Same `eletrocromo.json`. Packaging tricks from **rterm** (XcodeGen, ad-hoc unsigned, no sandbox) — not rterm’s SwiftTerm UI or fill-screen chrome.
+
+| Rule | Decision |
+|------|----------|
+| Command | `eletrocromo build macos` |
+| Config | Same keys as android. **No new fields** in v1. |
+| `package_id` | `CFBundleIdentifier` |
+| `app_name` | `CFBundleName` / `CFBundleDisplayName` |
+| `version_name` | `CFBundleShortVersionString` |
+| `version_code` | `CFBundleVersion` |
+| `icon` / `--icon` | Existing icon pipeline; copy `macos/icon.icns` into the bundle |
+| `go_main` | `CGO_ENABLED=0` darwin binary for the **host arch** |
+| Default `--out` | `dist/<app_name>.app` |
+| Flags | Same family as android: `--config`, `--out`, `--workdir`, `--go-only`, `--icon`, `--refresh-icons`, identity/version overrides |
+| Full `.app` | Mac with **Xcode** (`xcodegen` + `xcodebuild`) |
+| `--go-only` | Write the host tree + darwin Go binary on any OS; skip `xcodebuild` |
+| Artifact | One **unsigned Debug** `.app`. Ad-hoc sign (`CODE_SIGN_IDENTITY="-"`). |
+| Arch | **Host arch only** |
+| Sandbox | **Off** |
+| Min OS | **14.0** |
+| Chrome | Splash + status until READY; Retry on failure; normal title bar; `⌘R` reloads |
+| Lifetime | **Not a Mac special case.** Same two desktop modes (window-owned vs tray). Those modes are still pending on Linux. |
+| Off-loopback http(s) | Open in the **default browser**. Loopback stays in WKWebView. `target=_blank` / `window.open` use the same rule. |
+| ATS | Cleartext only for `127.0.0.1` / `localhost` (same policy as Android `network_security_config`) |
+| Inspector | On (`isInspectable`) |
+| Icons | Run `build icons` when `macos/icon.icns` is missing (or `--refresh-icons`) |
+| Handshake | `ELETROCROMO_NO_UI=1`, `ELETROCROMO_NO_ENSURE=1`, `ELETROCROMO_READY` / `ELETROCROMO_READY_FILE` (same as Android) |
+
+v1 macos non-goals:
+
+- DMG, notarization, Developer ID, universal `lipo`
+- App Sandbox, App Store, prebuilt Mach-O stub, new json keys
+- Camera/mic usage strings, custom URL schemes
+- Native menus beyond system defaults
+- rterm notch / fill-screen
+- Darwin Helium discovery (desktop `Run()` track)
+
+Success test:
+
+1. On a Mac with Xcode: `eletrocromo build macos --config examples/counter/eletrocromo.json`
+2. Open `dist/Counter.app` (Gatekeeper: right-click → Open).
+3. Splash until READY; counter `+` / `−` work.
+4. A non-loopback `https://` link opens the default browser.
+5. `--go-only` on any OS writes a host tree + darwin Go binary and does not need Xcode.
+
 ### `eletrocromo.json` (packaging config)
 
 Existing fields remain (`schema_version`, `package_id`, `app_name`, `go_main`, `abis`, version fields as implemented). Add:
@@ -405,7 +475,7 @@ Existing fields remain (`schema_version`, `package_id`, `app_name`, `go_main`, `
 |-------|------|
 | `icon` | Optional path to master PNG/SVG; relative to the config file’s directory. Empty/absent → default mark |
 
-Flags always override config for a single invocation.
+`package_id` is the Android applicationId **and** the Mac `CFBundleIdentifier`. `abis` applies to android only. Flags always override config for a single invocation.
 
 ## Implementation notes (today → target)
 
@@ -418,7 +488,7 @@ Flags always override config for a single invocation.
 | Lifetime | Context cancel; browser lifecycle partial | Default window-owned; flag background + tray |
 | Tray / lockfile | Absent or partial | Linux v1 requirement |
 | Example | counter / ticker / basic / astro | Template counter + mode flag as dogfood bar |
-| Packaging CLI | `android create` / `android build`; system default Android icon | `build icons` / `build android`; default mark; full icon matrix; taskgroup |
+| Packaging CLI | `build icons` / `build android` / `build macos`; default mark; full icon matrix; taskgroup | `build ios` scaffold: JIT Debug `.app` (WKWebView + c-archive). Grill before treating as product |
 | workspaced dep | Subprocess only (library + CLI) | Library: subprocess only. CLI: may `require` workspaced modules + tool ensure |
 | README | Architecture + CLI + APK blurb | Align with this SPEC (desktop + packaging) |
 
@@ -438,6 +508,8 @@ Flags always override config for a single invocation.
 - `eletrocromo build icons` with no config produces a complete `dist/icons` tree from the default mark.
 - With `icon` / `--icon`, the same tree is derived from the user master (pad+center).
 - `eletrocromo build android` produces an APK whose launcher icon is not the Android system placeholder when icons were generated.
+- `eletrocromo build macos` on a Mac with Xcode produces an unsigned Debug `.app` whose icon is the generated `macos/icon.icns` and whose window is WKWebView (not Helium).
+- `--go-only` for macos writes the host tree + darwin Go binary without Xcode.
 - Documented GoReleaser hook can call `build icons` without eletrocromo owning the release.
 
 ## Implementation order (toward full SPEC)
@@ -457,6 +529,8 @@ Flags always override config for a single invocation.
 3. Wire `icon` / `--icon` / `--output` / `--refresh-icons` + missing-only policy.
 4. Fold android into `build android`; icons dep; mipmaps into JIT workdir; demote `create`.
 5. Docs: GR OSS + Pro recipes; README packaging section.
+6. `build macos`: ephemeral XcodeGen + Swift WKWebView host; host-arch Go; unsigned Debug `.app`; icons → icns; `--go-only`.
+7. `build ios` (scaffold): ephemeral XcodeGen + UIKit WKWebView; `c-archive` (`EletrocromoStart`); READY file; simulator Debug; `--go-only`. Grill before App Store / device product claims.
 
 ## Open implementation choices (not product questions)
 
@@ -474,7 +548,16 @@ Resolved by engineering when building, not by re-litigating product meaning:
 - Precise “outputs missing” checklist for skip-vs-generate
 - Whether `cmd/eletrocromo` stays `CGO_ENABLED=0` while shelling to external converters
 - Module path/version pin for importing workspaced (`taskgroup`, …)
+- AppKit vs SwiftUI for the WKWebView shell (dumb splash + WebView, not rterm chrome)
+- Path of the Go child inside the `.app` (`Contents/MacOS` vs `Helpers`)
+- Ephemeral project shape (XcodeGen `project.yml` vs checked-in template xcodeproj)
+- How host arch is detected (`runtime.GOARCH` vs `uname`)
+- Exact Info.plist ATS keys and splash asset (app icns vs default mark)
 
 ---
 
-*Aligned in grill sessions: Helium-only shell, workspaced registry ensure (`helium-browser`), no other Chromium-likes, no system-browser fallback (2026-07-20); app icon matrix + `build icons` / `build android` packaging CLI, default brand mark/lockup, GR hooks-not-plugin, taskgroup import for packaging only (2026-07-23). Do not expand scope into non-goals without a new explicit decision.*
+*Aligned in grill sessions. Do not expand scope into non-goals without a new explicit decision.*
+
+- 2026-07-20: Helium-only desktop shell. workspaced `helium-browser`. No other Chromium-likes. No system-browser fallback for desktop `Run()`.
+- 2026-07-23: Icon matrix. `build icons` / `build android`. Default mark/lockup. GoReleaser hooks, not a plugin. taskgroup import for packaging only.
+- 2026-08-22: JIT unsigned Debug `.app`. WKWebView host. Same json as android. rterm packaging tricks, not rterm UI. Off-loopback links open in the default browser.

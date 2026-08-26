@@ -7,8 +7,10 @@ import (
 	"time"
 )
 
+var ErrTestBoom = errors.New("boom")
+
 func TestFunctionTask_Run(t *testing.T) {
-	want := errors.New("boom")
+	want := ErrTestBoom
 	task := FunctionTask(func(ctx context.Context) error {
 		if ctx == nil {
 			t.Fatal("nil context")

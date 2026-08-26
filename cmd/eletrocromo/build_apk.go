@@ -2,18 +2,22 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/lewtec/eletrocromo/internal/apkgen"
+	"github.com/lewtec/eletrocromo/internal/gen/apk"
 	"github.com/lewtec/eletrocromo/internal/icons"
 	"github.com/lucasew/workspaced/pkg/logging"
 	"github.com/lucasew/workspaced/pkg/taskgroup"
 	"github.com/spf13/cobra"
 )
+
+// ErrMissingPackageID is returned when build android has no package_id (config or --id).
+// Callers can use errors.Is.
+var ErrMissingPackageID = errors.New("package id required")
 
 func newBuildAndroidCmd() *cobra.Command {
 	var (
@@ -66,64 +70,35 @@ Example (from examples/counter):
 				return err
 			}
 			if strings.TrimSpace(cfg.PackageID) == "" {
-				return fmt.Errorf("package id required: set package_id in %s or pass --id", apkgen.ConfigFileName)
+				return fmt.Errorf("%w: set package_id in %s or pass --id", ErrMissingPackageID, apk.ConfigFileName)
 			}
 
-			// Resolve icon source: flag > config
-			iconSrc := strings.TrimSpace(iconPath)
-			if iconSrc == "" {
-				iconSrc = strings.TrimSpace(cfg.Icon)
-				if iconSrc != "" && !filepath.IsAbs(iconSrc) {
-					iconSrc = filepath.Join(baseDir, iconSrc)
-				}
-			} else if !filepath.IsAbs(iconSrc) {
-				iconSrc = filepath.Join(cwd, iconSrc)
-			}
-
-			iconOut := strings.TrimSpace(iconOutput)
-			if iconOut == "" {
-				iconOut = icons.DefaultOutputDir
-			}
-			if !filepath.IsAbs(iconOut) {
-				iconOut = filepath.Join(cwd, iconOut)
-			}
+			// Same icon flag/config/output rules as "build icons".
+			iconSrc := resolveIconSource(cwd, iconPath, baseDir, cfg.Icon)
+			iconOut := resolveIconOutput(cwd, iconOutput)
 
 			outAPK := strings.TrimSpace(out)
 			if outAPK == "" && !goOnly {
-				outAPK = apkgen.DefaultOutAPK(cfg.PackageID, cwd)
+				outAPK = apk.DefaultOutAPK(cfg.PackageID, cwd)
 			}
 
 			ctx := logging.NewWriterContext(cmd.ErrOrStderr())
 			// quieter: discard slog noise from taskgroup unless needed
 			ctx = logging.ContextWithLogger(ctx, slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), &slog.HandlerOptions{Level: slog.LevelWarn})))
 
-			// taskgroup returns a child context; workers use the per-task ctx.
+			// taskgroup.New also returns a child context for group cancellation;
+			// workers receive that via g.Go callbacks — do not rebind outer ctx.
 			g, _ := taskgroup.New(ctx, taskgroup.DefaultLimits())
 			var iconRoot string
 
 			g.Go("icons", taskgroup.CPU, func(ctx context.Context, s *taskgroup.Status) error {
-				force := refresh
-				outw := cmd.OutOrStdout()
-				if !force && icons.Complete(iconOut) {
-					iconRoot = iconOut
-					_, err := fmt.Fprintf(outw, "eletrocromo: icons already present at %s\n", iconOut)
-					return err
-				}
-				man, err := icons.Generate(icons.Options{
-					SourcePath: iconSrc,
-					OutputDir:  iconOut,
-					Force:      force || !icons.Complete(iconOut),
-				})
-				if err != nil {
-					return err
-				}
-				iconRoot = man.OutputDir
-				_, err = fmt.Fprintf(outw, "eletrocromo: icons → %s\n", iconRoot)
+				var err error
+				iconRoot, err = ensureBuildIcons(cmd.OutOrStdout(), iconSrc, iconOut, refresh)
 				return err
 			})
 
 			g.Go("android", taskgroup.IO, func(ctx context.Context, s *taskgroup.Status) error {
-				result, err := apkgen.Build(apkgen.BuildOptions{
+				result, err := apk.Build(apk.BuildOptions{
 					Config:      cfg,
 					BaseDir:     baseDir,
 					WorkDir:     workDir,
@@ -175,26 +150,23 @@ Example (from examples/counter):
 	return cmd
 }
 
-func loadAPKConfig(cwd, configPath, id, name, goMain, version string, code int, cmd *cobra.Command) (apkgen.Config, string, error) {
-	var cfg apkgen.Config
+func loadAPKConfig(cwd, configPath, id, name, goMain, version string, code int, cmd *cobra.Command) (apk.Config, string, error) {
+	var cfg apk.Config
 	baseDir := cwd
 	cfgPath := strings.TrimSpace(configPath)
 	if cfgPath == "" {
-		try := filepath.Join(cwd, apkgen.ConfigFileName)
-		if st, err := os.Stat(try); err == nil && !st.IsDir() {
-			cfgPath = try
-		}
+		cfgPath = defaultConfigPath(cwd)
 	}
 	if cfgPath != "" {
-		loaded, dir, err := apkgen.LoadConfig(cfgPath)
+		loaded, dir, err := apk.LoadConfig(cfgPath)
 		if err != nil {
-			return apkgen.Config{}, "", err
+			return apk.Config{}, "", err
 		}
 		cfg = loaded
 		baseDir = dir
 	}
 
-	overlay := apkgen.Config{
+	overlay := apk.Config{
 		PackageID: id,
 		AppName:   name,
 		GoMain:    goMain,
@@ -208,6 +180,6 @@ func loadAPKConfig(cwd, configPath, id, name, goMain, version string, code int, 
 	if !cmd.Flags().Changed("go-main") {
 		overlay.GoMain = ""
 	}
-	cfg = apkgen.Merge(cfg, overlay)
+	cfg = apk.Merge(cfg, overlay)
 	return cfg, baseDir, nil
 }

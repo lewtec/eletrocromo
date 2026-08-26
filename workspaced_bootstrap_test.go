@@ -131,7 +131,7 @@ func TestExtractWorkspacedBinary_MissingEntryLeavesNoDest(t *testing.T) {
 	}
 	// extract itself does not open dest when the entry is missing, so the
 	// caller (bootstrapWorkspaced) must remove the path on extract failure.
-	_ = os.Remove(dest)
+	removeBestEffort(dest)
 	if _, err := os.Stat(dest); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("partial binary should be removed after extract failure, err=%v", err)
 	}

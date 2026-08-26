@@ -30,6 +30,8 @@ jobs:
       contents: write
       pull-requests: write
       id-token: write
+    outputs:
+      tag: ${{ steps.ship.outputs.tag }}
     steps:
       # Full history + tags required: svu needs existing tags to bump correctly.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -73,14 +75,83 @@ jobs:
           fi
 
       - name: Make release if everything looks right
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'workflow_dispatch'
+        id: ship
         env:
-          # workflow_dispatch sets this; schedule/push to main default to next
-          NEW_VERSION: ${{ github.event.inputs.new_version || 'next' }}
+          NEW_VERSION: ${{ github.event.inputs.new_version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           echo "Existing tags (top):"
           git tag --sort=-v:refname | head -10 || true
           echo "svu current=$(svu current 2>/dev/null || true) next=$(svu next) minor=$(svu minor) patch=$(svu patch)"
+          TAG="$(svu "$NEW_VERSION")"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           mise run release -- "$NEW_VERSION"
+
+      - name: Set up JDK 17
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        if: github.event_name == 'workflow_dispatch'
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: tools platform-tools platforms;android-35 build-tools;35.0.0
+
+      - name: Build and upload example APKs
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mise run release:examples:android
+          gh release upload "${{ steps.ship.outputs.tag }}" dist/examples/*.apk --clobber
+
+  examples-apple:
+    if: github.event_name == 'workflow_dispatch'
+    needs: autorelease
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.autorelease.outputs.tag }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+
+      - name: Install
+        run: mise run install
+
+      - name: Build and upload example Apple apps
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mise run release:examples:apple
+          gh release upload "${{ needs.autorelease.outputs.tag }}" dist/examples/*.zip --clobber
+
+  release-checksums:
+    if: github.event_name == 'workflow_dispatch' && always() && needs.autorelease.result == 'success'
+    needs: [autorelease, examples-apple]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Refresh checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.autorelease.outputs.tag }}
+        run: |
+          set -euo pipefail
+          tmpdir="$(mktemp -d)"
+          gh release download "$TAG" --repo "${{ github.repository }}" --dir "$tmpdir"
+          rm -f "$tmpdir/checksums.txt"
+          (cd "$tmpdir" && sha256sum * | LC_ALL=C sort) > checksums.txt
+          gh release upload "$TAG" checksums.txt --clobber --repo "${{ github.repository }}"

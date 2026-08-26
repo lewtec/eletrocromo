@@ -57,11 +57,13 @@ func TestBackgroundRun_UsesAppContext(t *testing.T) {
 	app := &App{Context: ctx}
 
 	var sawCancel atomic.Bool
-	_ = app.BackgroundRun(FunctionTask(func(taskCtx context.Context) error {
+	if err := app.BackgroundRun(FunctionTask(func(taskCtx context.Context) error {
 		<-taskCtx.Done()
 		sawCancel.Store(true)
 		return nil
-	}))
+	})); err != nil {
+		t.Fatal(err)
+	}
 
 	cancel()
 	app.WaitGroup.Wait()

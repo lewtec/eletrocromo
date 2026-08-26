@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="internal/icons/default/lockup.png" alt="eletrocromo" width="240">
+</p>
+
 # eletrocromo
 
 A simpler approach to desktop apps without Electron or Wails: pure Go HTTP
@@ -72,17 +76,19 @@ go run ./cmd/eletrocromo --help
 go run ./cmd/eletrocromo version
 go run ./cmd/eletrocromo build icons          # → dist/icons (default mark or config icon)
 go run ./cmd/eletrocromo build android       # JIT APK; generates icons if missing
+go run ./cmd/eletrocromo build macos         # JIT unsigned Debug .app (Mac + Xcode)
+go run ./cmd/eletrocromo build ios           # JIT Debug .app (Mac + Xcode iOS SDK)
 # or: mise run build:cli && ./bin/eletrocromo version
 ```
 
 ### App icons
 
-One master **PNG/JPEG** (or the shipped default mark) → full matrix under `dist/icons/`:
+One master **PNG/JPEG** (or a square mark cropped from the shipped lockup) → full matrix under `dist/icons/`:
 
 `windows/`, `macos/`, `linux/`, `android/` mipmaps, `web/`, `manifest.json`.
 
 ```bash
-# default mark
+# default lockup → mark + platform tree
 go run ./cmd/eletrocromo build icons --output dist/icons
 
 # app master (also: "icon" in eletrocromo.json)
@@ -96,16 +102,22 @@ Wire paths into GoReleaser yourself (`before.hooks`, Pro `app_bundles.icon`, nFP
 
 ### Release
 
-Self-contained binaries (`CGO_ENABLED=0`) via [GoReleaser](https://goreleaser.com/)
-on GitHub Actions (push/`schedule` to `main`, or `workflow_dispatch`):
+Self-contained binaries (`CGO_ENABLED=0`) via [GoReleaser](https://goreleaser.com/).
+GitHub Releases only from **Actions → Autorelease → Run workflow** (`workflow_dispatch`).
+Push/`schedule` on `main` run CI only.
 
 ```bash
 # local (needs GITHUB_TOKEN + push rights):
 mise run release -- patch   # or next | minor | major
 ```
 
-Artifacts: `eletrocromo_{Linux,Darwin,Windows}_{x86_64,arm64}` archives under
-GitHub Releases, stamped with `internal/version` ldflags.
+Artifacts under GitHub Releases, stamped with `internal/version` ldflags:
+
+- CLI: `eletrocromo_{Linux,Darwin,Windows}_{x86_64,arm64}`
+- Example desktop binaries: `example-{basic,counter,ticker,astro}_{Linux,Darwin,Windows}_{x86_64,arm64}`
+- Example Android debug APKs: `example-*-debug.apk`
+- Example macOS unsigned Debug `.app` zips: `example-*_macOS.app.zip`
+- Example iOS Simulator Debug `.app` zips: `example-*_iOS-simulator.app.zip`
 
 Version uses the usual Go release stamps (`internal/version`):
 
@@ -151,5 +163,58 @@ go run ./cmd/eletrocromo build android --config examples/counter/eletrocromo.jso
 Icons are generated when missing (`--refresh-icons` to force). Legacy
 `android build` / `android create` still work; prefer `build android`. Runtime:
 the service sets `ELETROCROMO_NO_UI=1` and loads the `ELETROCROMO_READY` URL in
-WebView. Packaging lives in `internal/apkgen/` + `internal/icons/` +
+WebView. Packaging lives in `internal/gen/apk/` + `internal/icons/` +
 `cmd/eletrocromo` (not in the core library import path for apps).
+
+### macOS `.app` (straight build)
+
+Same config and handshake as the APK. The host is a WKWebView shell, not Helium.
+Full `.app` needs **Xcode** and **xcodegen** on a Mac. Without them:
+
+```bash
+go run ./cmd/eletrocromo build macos \
+  --config examples/counter/eletrocromo.json \
+  --go-only \
+  --workdir dist/macos-counter
+```
+
+On a Mac with Xcode:
+
+```bash
+go run ./cmd/eletrocromo build macos \
+  --config examples/counter/eletrocromo.json \
+  --out dist/Counter.app
+
+mise run macos:counter
+```
+
+The `.app` is unsigned Debug. First open: right-click → Open. Off-loopback
+http(s) links open in the default browser. Packaging lives in `internal/gen/mac/`.
+
+### iOS `.app` (scaffold)
+
+Same config and READY-file handshake as Android/macOS. iOS cannot exec a
+helper, so the Go app is a `c-archive` (`EletrocromoStart`) linked into a
+UIKit WKWebView host. Full `.app` needs **Xcode** (iOS SDK) and **xcodegen**
+on a Mac. Launch needs an **iOS Simulator runtime** (or a signed device).
+
+```bash
+go run ./cmd/eletrocromo build ios \
+  --config examples/counter/eletrocromo.json \
+  --go-only \
+  --workdir dist/ios-counter
+```
+
+On a Mac with Xcode:
+
+```bash
+go run ./cmd/eletrocromo build ios \
+  --config examples/counter/eletrocromo.json \
+  --out dist/Counter.app
+
+mise run ios:counter
+```
+
+Default SDK is `iphonesimulator`. Use `--sdk iphoneos` for a device archive.
+The `.app` is Debug, unsigned (`CODE_SIGNING_ALLOWED=NO`). Off-loopback
+http(s) links open in Safari. Packaging lives in `internal/gen/ios/`.

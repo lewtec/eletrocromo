@@ -1,9 +1,10 @@
 [tools]
-"github:lucasew/workspaced" = "0.12.0"
+"github:lucasew/workspaced" = "0.15.2"
 go = "1.26.5"
-golangci-lint = "2.12.2"
+golangci-lint = "2.13.1"
 goreleaser = "2.17.0"
 svu = "3.3.0"
+xcodegen = "2.46.0"
 
 [tasks]
 "install:go" = "go mod download"
@@ -11,6 +12,8 @@ svu = "3.3.0"
 go -C examples/basic mod download
 go -C examples/counter mod download
 go -C examples/ticker mod download
+go -C examples/inbox mod download
+go -C examples/astro mod download
 """
 install = { depends = ["install:*"] }
 lint = "workspaced codebase lint --review"
@@ -19,7 +22,9 @@ fmt = "workspaced codebase format"
 test = { depends = ["test:*"] }
 "codegen:go" = "go generate ./..."
 codegen = { depends = ["codegen:*"] }
-ci = { depends = ["lint", "test"] }
+"check:goreleaser" = "goreleaser check"
+check = { depends = ["check:*"] }
+ci = { depends = ["lint", "test", "check"] }
 
 # Local binary (same package as releases).
 "build:cli" = "go build -o bin/eletrocromo ./cmd/eletrocromo"
@@ -38,16 +43,112 @@ go run ./cmd/eletrocromo build android \
   --go-only \
   --workdir dist/android-counter
 """
+"macos:counter" = """
+go run ./cmd/eletrocromo build macos \
+  --config examples/counter/eletrocromo.json \
+  --out dist/Counter.app \
+  --workdir dist/macos-counter
+"""
+"macos:counter:go" = """
+go run ./cmd/eletrocromo build macos \
+  --config examples/counter/eletrocromo.json \
+  --go-only \
+  --workdir dist/macos-counter
+"""
+"ios:counter" = """
+go run ./cmd/eletrocromo build ios \
+  --config examples/counter/eletrocromo.json \
+  --out dist/Counter.app \
+  --workdir dist/ios-counter
+"""
+"ios:counter:go" = """
+go run ./cmd/eletrocromo build ios \
+  --config examples/counter/eletrocromo.json \
+  --go-only \
+  --workdir dist/ios-counter
+"""
+"ios:inbox" = """
+go run ./cmd/eletrocromo build ios \
+  --config examples/inbox/eletrocromo.json \
+  --out dist/Inbox.app \
+  --workdir dist/ios-inbox
+"""
+"ios:inbox:sim" = "bash examples/inbox/sim.sh sim"
+"ios:inbox:ping" = "bash examples/inbox/sim.sh ping"
 "icons" = "go run ./cmd/eletrocromo build icons --refresh-icons"
 
 # Dogfood host resolve + Helium --app (Ctrl+C to quit).
 "example:basic" = "go -C examples/basic run ."
 "example:counter" = "go -C examples/counter run ."
 "example:ticker" = "go -C examples/ticker run ."
+"example:inbox" = "go -C examples/inbox run ."
 
 # Astro + orvalho: tools/tasks live in examples/astro/mise.toml
 "example:astro:build" = "mise -C examples/astro run build"
 "example:astro" = "mise -C examples/astro run run"
+
+# Release extras: desktop archives come from GoReleaser; these tasks build
+# the packaging targets (APK / .app) and are invoked by Autorelease only.
+[tasks."apk:inbox"]
+description = "Inbox debug APK (mise java + android-sdk + gradle)"
+tools = { java = "temurin-17", android-sdk = "19.0", gradle = "8.9" }
+run = '''
+yes | sdkmanager --licenses >/dev/null || true
+sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+go run ./cmd/eletrocromo build android \
+  --config examples/inbox/eletrocromo.json \
+  --out dist/inbox-debug.apk \
+  --workdir dist/android-inbox
+'''
+
+[tasks."android:inbox"]
+description = "Install Inbox on the connected adb device and launch"
+tools = { java = "temurin-17", android-sdk = "19.0", gradle = "8.9" }
+run = '''
+mise run apk:inbox
+adb install -r dist/inbox-debug.apk
+adb shell am start -n br.tec.lew.eletrocromo.inbox/.MainActivity
+'''
+
+[tasks."release:examples:android"]
+description = "Debug APKs for every example (ANDROID_HOME, JDK 17, Gradle 8.9+)"
+tools = { gradle = "8.9" }
+run = '''
+mkdir -p dist/examples
+for name in basic counter ticker astro; do
+  go run ./cmd/eletrocromo build android \
+    --config "examples/${name}/eletrocromo.json" \
+    --out "dist/examples/example-${name}-debug.apk" \
+    --workdir "dist/android-${name}"
+done
+'''
+
+[tasks."release:examples:apple"]
+description = "Unsigned macOS and iOS Simulator .app zips for every example (macOS + Xcode)"
+run = '''
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "release:examples:apple needs macOS and Xcode" >&2
+  exit 1
+fi
+mkdir -p dist/examples
+for name in basic counter ticker astro; do
+  go run ./cmd/eletrocromo build macos \
+    --config "examples/${name}/eletrocromo.json" \
+    --out "dist/examples/example-${name}.app" \
+    --workdir "dist/macos-${name}"
+  ditto -c -k --keepParent \
+    "dist/examples/example-${name}.app" \
+    "dist/examples/example-${name}_macOS.app.zip"
+
+  go run ./cmd/eletrocromo build ios \
+    --config "examples/${name}/eletrocromo.json" \
+    --out "dist/examples/example-${name}-ios.app" \
+    --workdir "dist/ios-${name}"
+  ditto -c -k --keepParent \
+    "dist/examples/example-${name}-ios.app" \
+    "dist/examples/example-${name}_iOS-simulator.app.zip"
+done
+'''
 
 # Nested table must come after flat [tasks] keys.
 [tasks.release]

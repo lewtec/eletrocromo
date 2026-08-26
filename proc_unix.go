@@ -3,10 +3,15 @@
 package eletrocromo
 
 import (
+	"errors"
 	"os/exec"
 	"syscall"
 	"time"
 )
+
+func isESRCH(err error) bool {
+	return errors.Is(err, syscall.ESRCH)
+}
 
 // heliumKillGrace is how long killProcessTree waits after SIGTERM before SIGKILL.
 // Chromium helpers often need the hard kill; the grace lets a clean exit win first.
@@ -31,7 +36,10 @@ func killProcessTree(cmd *exec.Cmd) {
 	}
 	pid := cmd.Process.Pid
 	// Prefer graceful stop; Chromium often needs a hard kill for helpers.
-	_ = syscall.Kill(-pid, syscall.SIGTERM)
+	// Kill errors are expected once the tree is already gone (ESRCH).
+	if err := syscall.Kill(-pid, syscall.SIGTERM); err != nil && !isESRCH(err) {
+		return
+	}
 
 	deadline := time.Now().Add(heliumKillGrace)
 	for {
@@ -45,5 +53,7 @@ func killProcessTree(cmd *exec.Cmd) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	_ = syscall.Kill(-pid, syscall.SIGKILL)
+	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !isESRCH(err) {
+		return
+	}
 }

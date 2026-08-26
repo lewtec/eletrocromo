@@ -3,6 +3,7 @@ package icons
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -11,6 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+)
+
+// Sentinel errors for icon generation.
+var (
+	ErrSVGNotRasterized    = errors.New("svg masters are not rasterized in-process yet; pass a PNG/JPEG, or convert first (tool catalog TBD)")
+	ErrAndroidIconsMissing = errors.New("android icons missing (run build icons)")
+	ErrMacOSIconMissing    = errors.New("macos icon.icns missing (run build icons)")
 )
 
 // Options drives Generate.
@@ -33,6 +41,15 @@ type Manifest struct {
 
 // DefaultOutputDir is the SPEC default tree root name.
 const DefaultOutputDir = "dist/icons"
+
+// defaultMaster crops the square mark from the vendored lockup.
+func defaultMaster() (image.Image, error) {
+	img, err := DecodeBytes(DefaultLockupPNG, "default/lockup.png")
+	if err != nil {
+		return nil, fmt.Errorf("default lockup: %w", err)
+	}
+	return Resize(ExtractUpperMark(KnockoutBackground(img)), 1024), nil
+}
 
 // Generate writes a full icon matrix under opts.OutputDir.
 // If the tree is already Complete and !Force, it is a no-op.
@@ -64,12 +81,12 @@ func Generate(opts Options) (*Manifest, error) {
 		}
 		ext := strings.ToLower(filepath.Ext(p))
 		if ext == ".svg" {
-			return nil, fmt.Errorf("svg masters are not rasterized in-process yet; pass a PNG/JPEG, or convert first (tool catalog TBD)")
+			return nil, ErrSVGNotRasterized
 		}
 	} else {
-		img, err = DecodeBytes(DefaultMarkPNG, "default/mark.png")
+		img, err = defaultMaster()
 		if err != nil {
-			return nil, fmt.Errorf("default mark: %w", err)
+			return nil, err
 		}
 	}
 
@@ -174,7 +191,7 @@ func Complete(dir string) bool {
 func ApplyAndroidRes(iconRoot, androidResDir string) error {
 	srcRoot := filepath.Join(iconRoot, "android")
 	if st, err := os.Stat(srcRoot); err != nil || !st.IsDir() {
-		return fmt.Errorf("android icons missing under %s (run build icons)", iconRoot)
+		return fmt.Errorf("%w under %s", ErrAndroidIconsMissing, iconRoot)
 	}
 	for _, m := range AndroidMipmaps {
 		src := filepath.Join(srcRoot, m.Dir, "ic_launcher.png")
@@ -192,6 +209,19 @@ func ApplyAndroidRes(iconRoot, androidResDir string) error {
 		}
 	}
 	return nil
+}
+
+// ApplyMacOSICNS copies macos/icon.icns to destICNS (full file path).
+func ApplyMacOSICNS(iconRoot, destICNS string) error {
+	src := filepath.Join(iconRoot, "macos", "icon.icns")
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrMacOSIconMissing, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(destICNS), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(destICNS, raw, 0o644)
 }
 
 func readManifest(dir string) (*Manifest, error) {
