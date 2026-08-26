@@ -2,7 +2,10 @@ module github.com/lewtec/eletrocromo/examples/inbox
 
 go 1.25.6
 
-require github.com/lewtec/eletrocromo v0.0.0
+require (
+	github.com/a-h/templ v0.3.1020
+	github.com/lewtec/eletrocromo v0.0.0
+)
 
 require github.com/google/uuid v1.6.0 // indirect
 
