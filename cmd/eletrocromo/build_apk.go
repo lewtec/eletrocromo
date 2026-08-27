@@ -1,17 +1,13 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/gen/apk"
 	"github.com/lewtec/eletrocromo/internal/icons"
-	"github.com/lucasew/workspaced/pkg/logging"
-	"github.com/lucasew/workspaced/pkg/taskgroup"
 	"github.com/spf13/cobra"
 )
 
@@ -82,22 +78,7 @@ Example (from examples/counter):
 				outAPK = apk.DefaultOutAPK(cfg.PackageID, cwd)
 			}
 
-			ctx := logging.NewWriterContext(cmd.ErrOrStderr())
-			// quieter: discard slog noise from taskgroup unless needed
-			ctx = logging.ContextWithLogger(ctx, slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), &slog.HandlerOptions{Level: slog.LevelWarn})))
-
-			// taskgroup.New also returns a child context for group cancellation;
-			// workers receive that via g.Go callbacks — do not rebind outer ctx.
-			g, _ := taskgroup.New(ctx, taskgroup.DefaultLimits())
-			var iconRoot string
-
-			g.Go("icons", taskgroup.CPU, func(ctx context.Context, s *taskgroup.Status) error {
-				var err error
-				iconRoot, err = ensureBuildIcons(cmd.OutOrStdout(), iconSrc, iconOut, refresh)
-				return err
-			})
-
-			g.Go("android", taskgroup.IO, func(ctx context.Context, s *taskgroup.Status) error {
+			return runIconsThen(cmd, iconThen{src: iconSrc, out: iconOut, refresh: refresh, name: "android"}, func(iconRoot string) error {
 				result, err := apk.Build(apk.BuildOptions{
 					Config:      cfg,
 					BaseDir:     baseDir,
@@ -127,9 +108,7 @@ Example (from examples/counter):
 				}
 				_, err = fmt.Fprintf(outw, "ok %s\n", result.APKPath)
 				return err
-			}, "icons")
-
-			return g.Wait()
+			})
 		},
 	}
 
