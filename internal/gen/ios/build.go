@@ -122,14 +122,10 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, buildErr
 	}
 
-	iconRoot := strings.TrimSpace(opts.IconRoot)
-	if iconRoot == "" {
-		tmpIcons := filepath.Join(workDir, ".eletrocromo-icons")
-		if _, err := icons.Generate(icons.Options{OutputDir: tmpIcons, Force: true}); err != nil {
-			buildErr = fmt.Errorf("default icons: %w", err)
-			return nil, buildErr
-		}
-		iconRoot = tmpIcons
+	iconRoot, err := icons.ResolveIconRoot(opts.IconRoot, workDir)
+	if err != nil {
+		buildErr = err
+		return nil, buildErr
 	}
 	assetsDir := filepath.Join(workDir, "Assets.xcassets")
 	if _, err := fmt.Fprintf(stdout, "eletrocromo: applying iOS icon from %s\n", iconRoot); err != nil {
