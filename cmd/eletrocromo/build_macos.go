@@ -1,16 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/gen/mac"
 	"github.com/lewtec/eletrocromo/internal/icons"
-	"github.com/lucasew/workspaced/pkg/logging"
-	"github.com/lucasew/workspaced/pkg/taskgroup"
 	"github.com/spf13/cobra"
 )
 
@@ -90,19 +86,7 @@ Example (from examples/counter):
 				outApp = mac.DefaultOutApp(appName, cwd)
 			}
 
-			ctx := logging.NewWriterContext(cmd.ErrOrStderr())
-			ctx = logging.ContextWithLogger(ctx, slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), &slog.HandlerOptions{Level: slog.LevelWarn})))
-
-			g, _ := taskgroup.New(ctx, taskgroup.DefaultLimits())
-			var iconRoot string
-
-			g.Go("icons", taskgroup.CPU, func(ctx context.Context, s *taskgroup.Status) error {
-				var err error
-				iconRoot, err = ensureBuildIcons(cmd.OutOrStdout(), iconSrc, iconOut, refresh)
-				return err
-			})
-
-			g.Go("macos", taskgroup.IO, func(ctx context.Context, s *taskgroup.Status) error {
+			return runIconsThen(cmd, iconThen{src: iconSrc, out: iconOut, refresh: refresh, name: "macos"}, func(iconRoot string) error {
 				result, err := mac.Build(mac.BuildOptions{
 					Config:      cfg,
 					BaseDir:     baseDir,
@@ -127,9 +111,7 @@ Example (from examples/counter):
 				}
 				_, err = fmt.Fprintf(outw, "ok %s\n", result.AppPath)
 				return err
-			}, "icons")
-
-			return g.Wait()
+			})
 		},
 	}
 

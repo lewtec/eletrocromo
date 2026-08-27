@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/gen/apk"
 	"github.com/lewtec/eletrocromo/internal/icons"
+	"github.com/lucasew/workspaced/pkg/logging"
+	"github.com/lucasew/workspaced/pkg/taskgroup"
 	"github.com/spf13/cobra"
 )
 
@@ -144,4 +148,29 @@ func ensureBuildIcons(outw io.Writer, iconSrc, iconOut string, refresh bool) (st
 	}
 	_, err = fmt.Fprintf(outw, "eletrocromo: icons → %s\n", man.OutputDir)
 	return man.OutputDir, err
+}
+
+type iconThen struct {
+	src, out string
+	refresh  bool
+	name     string
+}
+
+// runIconsThen generates the icon tree, then runs work with that root.
+// Same schedule as build android / ios / macos.
+func runIconsThen(cmd *cobra.Command, ic iconThen, work func(iconRoot string) error) error {
+	ctx := logging.NewWriterContext(cmd.ErrOrStderr())
+	ctx = logging.ContextWithLogger(ctx, slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), &slog.HandlerOptions{Level: slog.LevelWarn})))
+	// taskgroup.New also returns a child context; workers receive it via g.Go.
+	g, _ := taskgroup.New(ctx, taskgroup.DefaultLimits())
+	var iconRoot string
+	g.Go("icons", taskgroup.CPU, func(ctx context.Context, s *taskgroup.Status) error {
+		var err error
+		iconRoot, err = ensureBuildIcons(cmd.OutOrStdout(), ic.src, ic.out, ic.refresh)
+		return err
+	})
+	g.Go(ic.name, taskgroup.IO, func(ctx context.Context, s *taskgroup.Status) error {
+		return work(iconRoot)
+	}, "icons")
+	return g.Wait()
 }

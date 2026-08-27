@@ -134,6 +134,29 @@ func TestEnsureBuildIcons(t *testing.T) {
 	}
 }
 
+func TestRunIconsThen(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "icons")
+	cmd := newRootCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	var got string
+	err := runIconsThen(cmd, iconThen{src: "", out: out, refresh: false, name: "work"}, func(iconRoot string) error {
+		got = iconRoot
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !icons.Complete(got) {
+		t.Fatalf("work ran without a complete tree: %s", got)
+	}
+	if !strings.Contains(buf.String(), "icons →") {
+		t.Fatalf("generate log: %s", buf.String())
+	}
+}
+
 func TestResolveIconOutput(t *testing.T) {
 	cwd := t.TempDir()
 	got := resolveIconOutput(cwd, "")
