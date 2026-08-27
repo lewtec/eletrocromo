@@ -1,11 +1,46 @@
 package common
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
 )
+
+func TestMaterializeHost_RendersAndWritesJSON(t *testing.T) {
+	src := fstest.MapFS{
+		"template/Info.plist.tmpl": {Data: []byte(`<name>{{.Name}}</name>`)},
+	}
+	out := filepath.Join(t.TempDir(), "host")
+	err := MaterializeHost(src, struct{ Name string }{Name: "App"}, out, false, []byte("{\"ok\":true}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plist, err := os.ReadFile(filepath.Join(out, "Info.plist"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(plist) != "<name>App</name>" {
+		t.Fatalf("plist: %q", plist)
+	}
+	jsonb, err := os.ReadFile(filepath.Join(out, HostConfigFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(jsonb) != "{\"ok\":true}\n" {
+		t.Fatalf("json: %q", jsonb)
+	}
+}
+
+func TestMaterializeHost_EmptyOutDir(t *testing.T) {
+	src := fstest.MapFS{
+		"template/static.txt": {Data: []byte("x")},
+	}
+	if err := MaterializeHost(src, nil, "  ", false, nil); !errors.Is(err, ErrOutDirRequired) {
+		t.Fatalf("want ErrOutDirRequired, got %v", err)
+	}
+}
 
 func TestWalkTemplate_RendersAndCopies(t *testing.T) {
 	src := fstest.MapFS{

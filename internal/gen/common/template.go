@@ -11,6 +11,19 @@ import (
 	"text/template"
 )
 
+// MaterializeHost prepares outDir, renders src's template/ tree with data,
+// and writes eletrocromo.json from configJSON.
+func MaterializeHost(src fs.FS, data any, outDir string, force bool, configJSON []byte) error {
+	out, err := ResolveCreateOut(outDir, force)
+	if err != nil {
+		return err
+	}
+	if err := WalkTemplate(src, data, out); err != nil {
+		return err
+	}
+	return WriteHostJSON(out, configJSON)
+}
+
 // WalkTemplate copies src's template/ tree into out, rendering *.tmpl files
 // and any other file whose body contains "{{".
 func WalkTemplate(src fs.FS, data any, out string) error {

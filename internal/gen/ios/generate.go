@@ -3,9 +3,6 @@ package ios
 import (
 	"embed"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/gen/common"
 )
@@ -41,18 +38,6 @@ func Create(opts Options) error {
 	if err != nil {
 		return err
 	}
-	out := strings.TrimSpace(opts.OutDir)
-	if out == "" {
-		return ErrOutDirRequired
-	}
-	out, err = filepath.Abs(out)
-	if err != nil {
-		return err
-	}
-	if err := common.PrepareOutDir(out, opts.Force); err != nil {
-		return err
-	}
-
 	product := cfg.ProductName()
 	data := templateData{
 		Config:             cfg,
@@ -68,12 +53,9 @@ func Create(opts Options) error {
 		EmbedShare:         cfg.Capabilities.Files != nil || cfg.Capabilities.Share != nil,
 		ShareActivationXML: cfg.Capabilities.ShareActivationXML(),
 	}
-	if err := common.WalkTemplate(templateFS, data, out); err != nil {
-		return err
-	}
 	raw, err := encodeConfigJSON(cfg)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(out, "eletrocromo.json"), raw, 0o644)
+	return common.MaterializeHost(templateFS, data, opts.OutDir, opts.Force, raw)
 }

@@ -7,6 +7,30 @@ import (
 	"testing"
 )
 
+func TestResolveCreateOut_Empty(t *testing.T) {
+	_, err := ResolveCreateOut("  ", false)
+	if !errors.Is(err, ErrOutDirRequired) {
+		t.Fatalf("want ErrOutDirRequired, got %v", err)
+	}
+}
+
+func TestResolveCreateOut_CreatesAndWritesJSON(t *testing.T) {
+	out, err := ResolveCreateOut(filepath.Join(t.TempDir(), "host"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteHostJSON(out, []byte("{}\n")); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(out, HostConfigFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "{}\n" {
+		t.Fatalf("json: %q", raw)
+	}
+}
+
 func TestPrepareOutDir_CreatesAndForceWipes(t *testing.T) {
 	root := t.TempDir()
 	out := filepath.Join(root, "host")
