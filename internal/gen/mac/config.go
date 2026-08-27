@@ -6,13 +6,7 @@
 package mac
 
 import (
-	"encoding/json"
-	"fmt"
-	"strings"
-
-	"github.com/lewtec/eletrocromo"
 	"github.com/lewtec/eletrocromo/internal/gen/common"
-	"github.com/lewtec/eletrocromo/internal/version"
 )
 
 // Config / path sentinels.
@@ -43,61 +37,40 @@ func (c Config) ProductName() string {
 	return common.ProductName(c.PackageID, c.AppName)
 }
 
+func (c Config) hostConfig() common.HostConfig {
+	return common.HostConfig{
+		PackageID:    c.PackageID,
+		AppName:      c.AppName,
+		VersionName:  c.VersionName,
+		VersionCode:  c.VersionCode,
+		GoMain:       c.GoMain,
+		Icon:         c.Icon,
+		Capabilities: c.Capabilities,
+	}
+}
+
+func configFromHost(id common.HostConfig) Config {
+	return Config{
+		PackageID:    id.PackageID,
+		AppName:      id.AppName,
+		VersionName:  id.VersionName,
+		VersionCode:  id.VersionCode,
+		GoMain:       id.GoMain,
+		Icon:         id.Icon,
+		Capabilities: id.Capabilities,
+	}
+}
+
 func (c Config) withDefaults() (Config, error) {
-	c.PackageID = strings.TrimSpace(c.PackageID)
-	if err := eletrocromo.ValidateAppID(c.PackageID); err != nil {
-		return Config{}, fmt.Errorf("package id: %w", err)
-	}
-	c.AppName = strings.TrimSpace(c.AppName)
-	if c.AppName == "" {
-		parts := strings.Split(c.PackageID, ".")
-		c.AppName = parts[len(parts)-1]
-	}
-	if c.VersionName == "" || c.VersionCode <= 0 {
-		info := version.Resolve()
-		if c.VersionName == "" {
-			c.VersionName = info.AndroidName()
-		}
-		if c.VersionCode <= 0 {
-			c.VersionCode = version.AndroidCodeFrom(info.Version, 0)
-		}
-	}
-	if strings.TrimSpace(c.GoMain) == "" {
-		c.GoMain = "."
-	}
-	if err := c.Capabilities.Validate(); err != nil {
+	id, err := common.ApplyHostDefaults(c.hostConfig())
+	if err != nil {
 		return Config{}, err
 	}
-	return c, nil
+	return configFromHost(id), nil
 }
 
 func encodeConfigJSON(cfg Config) ([]byte, error) {
-	doc := struct {
-		SchemaVersion int                 `json:"schema_version"`
-		PackageID     string              `json:"package_id"`
-		AppName       string              `json:"app_name"`
-		VersionName   string              `json:"version_name"`
-		VersionCode   int                 `json:"version_code"`
-		GoMain        string              `json:"go_main"`
-		Icon          string              `json:"icon,omitempty"`
-		Generator     string              `json:"generator"`
-		Capabilities  common.Capabilities `json:"capabilities,omitempty"`
-	}{
-		SchemaVersion: 1,
-		PackageID:     cfg.PackageID,
-		AppName:       cfg.AppName,
-		VersionName:   cfg.VersionName,
-		VersionCode:   cfg.VersionCode,
-		GoMain:        cfg.GoMain,
-		Icon:          cfg.Icon,
-		Generator:     "eletrocromo-macos",
-		Capabilities:  cfg.Capabilities,
-	}
-	raw, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	return append(raw, '\n'), nil
+	return common.EncodeHostJSON(cfg.hostConfig(), "eletrocromo-macos")
 }
 
 // ResolveGoMain returns an absolute directory containing the Go main package.
