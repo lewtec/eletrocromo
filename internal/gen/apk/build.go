@@ -129,14 +129,10 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	}
 
 	// Manifest expects @mipmap/ic_launcher — always install mipmaps.
-	iconRoot := strings.TrimSpace(opts.IconRoot)
-	if iconRoot == "" {
-		tmpIcons := filepath.Join(workDir, ".eletrocromo-icons")
-		if _, err := icons.Generate(icons.Options{OutputDir: tmpIcons, Force: true}); err != nil {
-			buildErr = fmt.Errorf("default icons: %w", err)
-			return nil, buildErr
-		}
-		iconRoot = tmpIcons
+	iconRoot, err := icons.ResolveIconRoot(opts.IconRoot, workDir)
+	if err != nil {
+		buildErr = err
+		return nil, buildErr
 	}
 	resDir := filepath.Join(workDir, "app", "src", "main", "res")
 	if _, err := fmt.Fprintf(stdout, "eletrocromo: applying launcher icons from %s\n", iconRoot); err != nil {
