@@ -73,13 +73,9 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, err
 	}
 
-	vi := version.ResolveDir(goMain)
-	if strings.TrimSpace(opts.Config.VersionName) == "" {
-		cfg.VersionName = vi.AndroidName()
-	}
-	if opts.Config.VersionCode <= 0 {
-		cfg.VersionCode = version.AndroidCodeFrom(vi.Version, version.GitCommitCount(goMain))
-	}
+	vi, name, code := common.StampPackagingVersion(goMain, opts.Config.VersionName, opts.Config.VersionCode)
+	cfg.VersionName = name
+	cfg.VersionCode = code
 	if _, err := fmt.Fprintf(stdout, "eletrocromo: version %s (code %d)\n", cfg.VersionName, cfg.VersionCode); err != nil {
 		return nil, err
 	}
