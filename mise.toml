@@ -91,7 +91,7 @@ go run ./cmd/eletrocromo build ios \
 # the packaging targets (APK / .app) and are invoked by Autorelease only.
 [tasks."apk:inbox"]
 description = "Inbox debug APK (mise java + android-sdk + gradle)"
-tools = { java = "temurin-17", android-sdk = "19.0", gradle = "8.9" }
+tools = { java = "temurin-17", android-sdk = "19.0", gradle = "9.7.1" }
 run = '''
 yes | sdkmanager --licenses >/dev/null || true
 sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
@@ -103,7 +103,7 @@ go run ./cmd/eletrocromo build android \
 
 [tasks."android:inbox"]
 description = "Install Inbox on the connected adb device and launch"
-tools = { java = "temurin-17", android-sdk = "19.0", gradle = "8.9" }
+tools = { java = "temurin-17", android-sdk = "19.0", gradle = "9.7.1" }
 run = '''
 mise run apk:inbox
 adb install -r dist/inbox-debug.apk
@@ -112,7 +112,7 @@ adb shell am start -n br.tec.lew.eletrocromo.inbox/.MainActivity
 
 [tasks."release:examples:android"]
 description = "Debug APKs for every example (ANDROID_HOME, JDK 17, Gradle 8.9+)"
-tools = { gradle = "8.9" }
+tools = { gradle = "9.7.1" }
 run = '''
 mkdir -p dist/examples
 for name in basic counter ticker astro; do
