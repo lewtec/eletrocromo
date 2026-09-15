@@ -1,0 +1,72 @@
+[tools]
+"github:lucasew/workspaced" = "0.12.0"
+go = "1.26.5"
+golangci-lint = "2.12.2"
+goreleaser = "2.17.0"
+svu = "3.3.0"
+
+[tasks]
+"install:go" = "go mod download"
+"install:examples" = """
+go -C examples/basic mod download
+go -C examples/counter mod download
+go -C examples/ticker mod download
+"""
+install = { depends = ["install:*"] }
+lint = "workspaced codebase lint --review"
+fmt = "workspaced codebase format"
+"test:go" = "go test -v ./..."
+test = { depends = ["test:*"] }
+"codegen:go" = "go generate ./..."
+codegen = { depends = ["codegen:*"] }
+ci = { depends = ["lint", "test"] }
+
+# Local binary (same package as releases).
+"build:cli" = "go build -o bin/eletrocromo ./cmd/eletrocromo"
+
+# Build multiarch debug APK for the counter dogfood (needs ANDROID_HOME + JDK + Gradle).
+# Falls back to --go-only host tree when SDK is missing is not automatic; use apk:counter:go.
+"apk:counter" = """
+go run ./cmd/eletrocromo build android \
+  --config examples/counter/eletrocromo.json \
+  --out dist/counter-debug.apk \
+  --workdir dist/android-counter
+"""
+"apk:counter:go" = """
+go run ./cmd/eletrocromo build android \
+  --config examples/counter/eletrocromo.json \
+  --go-only \
+  --workdir dist/android-counter
+"""
+"icons" = "go run ./cmd/eletrocromo build icons --refresh-icons"
+
+# Dogfood host resolve + Helium --app (Ctrl+C to quit).
+"example:basic" = "go -C examples/basic run ."
+"example:counter" = "go -C examples/counter run ."
+"example:ticker" = "go -C examples/ticker run ."
+
+# Astro + orvalho: tools/tasks live in examples/astro/mise.toml
+"example:astro:build" = "mise -C examples/astro run build"
+"example:astro" = "mise -C examples/astro run run"
+
+# Nested table must come after flat [tasks] keys.
+[tasks.release]
+description = "Tag and ship self-contained binaries with GoReleaser (svu + goreleaser)"
+usage = '''
+arg "<version>" help="New version" {
+  choices "next" "major" "minor" "patch"
+  default "next"
+}
+'''
+run = '''
+TAG="$(svu ${usage_version})"
+echo "Releasing tag: $TAG (svu current=$(svu current 2>/dev/null || echo none))"
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+  echo "Tag $TAG already exists" >&2
+  exit 1
+fi
+git tag "$TAG"
+# Ensure the tag is on the remote before goreleaser publishes GitHub artifacts
+git push origin "refs/tags/$TAG"
+goreleaser release --clean
+'''
