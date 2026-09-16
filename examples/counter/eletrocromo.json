@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "package_id": "br.tec.lew.eletrocromo.counter",
+  "app_name": "Counter",
+  "go_main": ".",
+  "abis": ["arm64-v8a"]
+}
