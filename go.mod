@@ -1,10 +1,10 @@
 module github.com/lewtec/eletrocromo
 
-go 1.25.6
+go 1.27.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/lucasew/workspaced v0.0.0-20260722123058-736cf5ffa93a
+	github.com/lucasew/workspaced v0.0.0-20260915164303-b0f5653cb1dd
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/image v0.44.0
 )
@@ -26,6 +26,6 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 )
