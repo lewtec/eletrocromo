@@ -21,56 +21,25 @@ var (
 // HelperName is the Go child binary inside Contents/MacOS.
 const HelperName = "eletrocromo-server"
 
-// Config is the project identity written into the generated tree.
-type Config struct {
-	PackageID    string              `json:"package_id"`
-	AppName      string              `json:"app_name"`
-	VersionName  string              `json:"version_name"`
-	VersionCode  int                 `json:"version_code"`
-	GoMain       string              `json:"go_main"`
-	Icon         string              `json:"icon,omitempty"`
-	Capabilities common.Capabilities `json:"capabilities,omitempty"`
-}
+// Config is the macOS host identity. It is a named common.HostConfig so this
+// package can attach methods; on-disk JSON still goes through EncodeHostJSON.
+type Config common.HostConfig
 
 // ProductName is a filesystem-safe Xcode PRODUCT_NAME / .app stem.
 func (c Config) ProductName() string {
 	return common.ProductName(c.PackageID, c.AppName)
 }
 
-func (c Config) hostConfig() common.HostConfig {
-	return common.HostConfig{
-		PackageID:    c.PackageID,
-		AppName:      c.AppName,
-		VersionName:  c.VersionName,
-		VersionCode:  c.VersionCode,
-		GoMain:       c.GoMain,
-		Icon:         c.Icon,
-		Capabilities: c.Capabilities,
-	}
-}
-
-func configFromHost(id common.HostConfig) Config {
-	return Config{
-		PackageID:    id.PackageID,
-		AppName:      id.AppName,
-		VersionName:  id.VersionName,
-		VersionCode:  id.VersionCode,
-		GoMain:       id.GoMain,
-		Icon:         id.Icon,
-		Capabilities: id.Capabilities,
-	}
-}
-
 func (c Config) withDefaults() (Config, error) {
-	id, err := common.ApplyHostDefaults(c.hostConfig())
+	id, err := common.ApplyHostDefaults(common.HostConfig(c))
 	if err != nil {
 		return Config{}, err
 	}
-	return configFromHost(id), nil
+	return Config(id), nil
 }
 
 func encodeConfigJSON(cfg Config) ([]byte, error) {
-	return common.EncodeHostJSON(cfg.hostConfig(), "eletrocromo-macos")
+	return common.EncodeHostJSON(common.HostConfig(cfg), "eletrocromo-macos")
 }
 
 // ResolveGoMain returns an absolute directory containing the Go main package.
