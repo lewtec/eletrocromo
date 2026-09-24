@@ -62,7 +62,7 @@ func main() {
 		}),
 		Context: ctx,
 	}
-	log.Printf("astro example: launching Helium window (//go:embed guest + assets)")
+	log.Printf("astro example: opening web view (//go:embed guest + assets)")
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

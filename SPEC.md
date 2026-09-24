@@ -6,16 +6,15 @@ Status: approved (grill sessions 2026-07-20 desktop shell; 2026-07-23 app icons 
 
 ## One-liner
 
-A pure-Go process owns the HTTP app; eletrocromo binds loopback, gates access, opens a **Helium** (Chromium-based) `--app` window, and on Linux can keep the process alive and reopen the UI from the system tray. A separate **packaging CLI** (`cmd/eletrocromo`) generates multi-platform **app icons**, scaffolds Android hosts JIT into an APK, and scaffolds macOS hosts JIT into an unsigned Debug `.app`.
+A pure-Go process owns the HTTP app. On desktop, eletrocromo shows it in the system web view (WebKitGTK, WKWebView, or WebView2) with no listening port. Packaged Android, iOS, and macOS hosts still bind loopback and gate access with a token. On Linux the process can stay alive and reopen the UI from the system tray. A separate **packaging CLI** (`cmd/eletrocromo`) generates multi-platform **app icons**, scaffolds Android hosts JIT into an APK, and scaffolds macOS hosts JIT into an unsigned Debug `.app`.
 
 ## Goals
 
 - Ship desktop apps as **CGo-less Go binaries** whose UI is a normal webapp talking to a **server on the same device**.
 - Let the app focus on an `http.Handler` or `*http.Server`; the library handles bind, auth handshake, window launch, and process lifetime modes.
 - On **Linux (v1 bar)**: window-owned lifetime by default; optional background mode with **tray Open/Quit** so the user never retypes a token URL.
-- Stay thin: on desktop `Run()`, the window is **Helium only**, not a native toolkit and not “whatever Chromium is on PATH.” Packaged Android/macOS hosts use the OS WebView.
-- Prefer **[Helium](https://helium.computer/)** as the desktop shell: privacy-oriented Chromium fork that still supports `--app` app windows.
-- **Ensure** Helium when missing via **[workspaced](https://github.com/lucasew/workspaced)** (registry tool `helium-browser`), including bootstrapping the workspaced binary if needed — without vendoring browser blobs in this module.
+- Stay thin: on desktop `Run()`, the window is the OS web view from **[lewkit](https://github.com/lewtec/lewkit)** `x/driver/webview` (WebKitGTK 6, WKWebView, WebView2). No bundled browser. Packaged Android/macOS/iOS hosts keep their own OS web views and the loopback handshake.
+- Desktop pages are served **in-process** by that driver. There is no loopback listener on desktop `Run()`.
 - **Packaging CLI** (not the runtime library): generate a full **icon matrix** from one PNG/SVG (or a shipped default mark) and build **Android APKs** and **macOS `.app` bundles** via JIT host scaffold + attached Go binary. Leave DMG, notarization, PE embedding, and GoReleaser installer wiring to later tracks or the app author.
 
 ## Non-goals
@@ -27,8 +26,8 @@ Not this library’s job (now or as “quiet scope creep”):
 | Native menus, custom window chrome beyond `--app` | Dumb browser surface |
 | File/folder dialogs as library APIs | App/HTTP/browser concerns |
 | JS ↔ Go IPC bridge beyond ordinary HTTP/WebSocket | Would become Wails |
-| Vendoring Helium/Chromium **inside the eletrocromo module** | Ensure uses workspaced’s tool store + registry, not a copy of the browser in-tree |
-| Importing workspaced into the **runtime library** used at `App.Run()` | Helium ensure stays **subprocess** to the workspaced binary (stable boundary). Packaging CLI may import workspaced packages (e.g. `taskgroup`) |
+| Vendoring a browser **inside the eletrocromo module** | Desktop uses the OS web view through lewkit. No browser blobs in-tree |
+| Importing workspaced into the **runtime library** used at `App.Run()` | Packaging CLI may import workspaced packages (e.g. `taskgroup`). Desktop `Run()` does not |
 | Auto-updater, full installer product, mandatory PE embedding | Distribution is separate. JIT `build macos` is the Mac packaging product; DMG/notarization are not v1 |
 | Frontend framework or SPA opinions | App serves whatever it wants |
 | Multi-window platform APIs | Out of scope |
@@ -55,23 +54,20 @@ Not this library’s job (now or as “quiet scope creep”):
 │                     (token query → cookie, fail-closed)      │
 │                            │                                 │
 │                            ▼                                 │
-│                   loopback listener                          │
-│                   (library owns bind)                        │
-│                            │                                 │
-│                            ▼                                 │
-│                   Resolve browser host                       │
-│                   (see Ensure pipeline)                      │
+│                   system web view                            │
+│                   (lewkit; in-process handler)               │
 │                            │                                 │
 │              ┌─────────────┴─────────────┐                   │
 │              ▼                           ▼                   │
-│     helium --app <url>            tray (Linux)               │
-│     (primary shell)               Open / Quit                │
+│     WebKitGTK / WKWebView /       tray (Linux)               │
+│     WebView2                      Open / Quit                │
 │              │                           │                   │
 │              └──────── reopen / focus ───┘                   │
 │                                                              │
-│  No host after ensure? → hard error (never system browser)   │
+│  No web view? → hard error (never a browser binary)          │
 │  Lifetime: window-owned (default) | background (--flag)      │
 │  Single-instance: lockfile / PID + resume as needed          │
+│  Packaged Android / iOS / macOS: loopback + NoUI (unchanged) │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -110,14 +106,14 @@ Scaffold is **just-in-time** during `build android` (no happy-path “create hos
 
 ### macOS `.app` (wrapper architecture)
 
-`.app` is a **wrapper**, not a second app architecture and not a Helium bundle:
+`.app` is a **wrapper**, not a second app architecture:
 
 - WKWebView for UI
 - The host **runs the same Go app** (`ELETROCROMO_NO_UI=1`) on loopback
 - Same handshake as Android: `ELETROCROMO_READY` on stdout and/or `ELETROCROMO_READY_FILE`
 - Same mental model: webapp ↔ on-device server
 
-Desktop `App.Run()` from a terminal still uses **Helium only**. The packaged `.app` does not launch Helium.
+Desktop `App.Run()` from a terminal uses the lewkit web view (WKWebView on macOS). The packaged `.app` is a separate host: it runs the Go app with `ELETROCROMO_NO_UI=1` and its own WKWebView.
 
 Scaffold is **just-in-time** during `build macos` (ephemeral XcodeGen + Swift host). No happy-path “create host project and commit it”. Must not force Xcode, CGo, or a vendored Mach-O into the **importable desktop library**.
 
@@ -130,93 +126,55 @@ Two entry shapes (same ownership model):
 1. **Handler** — convenience constructor around `http.Handler`.
 2. **Server** — pass `*http.Server` for handler, timeouts, and related config the app cares about.
 
-The app does **not** own bind as the source of truth. If `Server.Addr` is set, the library either ignores it or rejects it; the library assigns the loopback address/port.
+On desktop the library does not bind a port. On the NoUI path (packaged hosts) the app does **not** own bind as the source of truth. If `Server.Addr` is set, the library either ignores it or rejects it; the library assigns the loopback address/port.
 
 ### What the library owns
 
 | Concern | Rule |
 |---------|------|
-| Bind | Loopback only (`127.0.0.1` / `localhost`, and `::1` if used). Never `0.0.0.0` / LAN as default or silent behavior. |
-| Auth | Always on. Mint token if unset; fail-closed when missing/invalid. |
-| Auth UX | Initial URL may carry `?token=…`; set HttpOnly cookie; subsequent requests use cookie. |
-| UI open | **App window** via Helium only + `--app` + per-app `--user-data-dir`. **No** Chrome/Edge/system browser. |
-| Host resolve | Local Helium → ensure Helium via workspaced → hard error if still missing. |
-| App identity | Required reverse-domain `App.ID` (e.g. `br.tec.lew.myapp`) for profile isolation and future APK package name. |
-| Launch failure | If Helium exits during startup grace, `Run` returns an error (not ignored). Later Helium exit cancels the app. |
-| Scheme | Only `http` / `https` for launch URLs. |
+| Bind | Desktop: no listener. NoUI: loopback only (`127.0.0.1` / `localhost`, and `::1` if used). Never `0.0.0.0` / LAN as default or silent behavior. |
+| Auth | Always on. Mint token if unset; fail-closed when missing/invalid. Desktop stamps the session cookie on each in-process request. NoUI keeps the `?token=` handshake. |
+| Auth UX | NoUI initial URL may carry `?token=…`; set HttpOnly cookie; subsequent requests use cookie. |
+| UI open | Desktop: OS web view via lewkit, per-app profile directory. **No** browser binary. |
+| Host resolve | lewkit driver: WebKitGTK on Linux, WKWebView on macOS, WebView2 on Windows. Hard error if the framework is missing. |
+| App identity | Required reverse-domain `App.ID` (e.g. `br.tec.lew.myapp`) for profile isolation and the packaged application id. |
+| Launch failure | If the web view fails to open, `Run` returns an error. Window close cancels the app. |
+| Scheme | `NewBrowserLaunchTask` accepts only `http` / `https`. |
 | Lifecycle | See modes below. |
 | Background work | Existing task/`WaitGroup` style coordination remains valid for app-scheduled work. |
 
-### Desktop window surface: Helium only
+### Desktop window surface
 
-On desktop, the UI is an app-mode window launched with `--app=<url>` on **[Helium](https://helium.computer/)** only (Chromium-based engine; we do not discover other browsers).
+On desktop, the UI is one OS web view from lewkit `x/driver/webview`. The page handler runs in-process on an `app://` origin. WebKitGTK 6 on Linux, WKWebView on macOS, WebView2 on Windows.
 
-| Path | Priority | Behavior |
-|------|----------|----------|
-| **Helium** (local) | 1 | `helium` on `PATH` |
-| **Helium via workspaced** | 2 | Ensure registry tool `helium-browser`, binary `helium` |
-| Chrome / Chromium / Edge / Brave / … | **Forbidden** | Not on the discovery list |
-| System default browser | **Forbidden** | Never `xdg-open` / OS URL opener |
-| Firefox / Gecko | **Forbidden** | Never |
+| Path | Behavior |
+|------|----------|
+| Linux | WebKitGTK 6. Missing library or no display → error |
+| macOS | WKWebView. `App.Run` from `main` binds the AppKit thread |
+| Windows | WebView2. Missing runtime → error |
+| Browser binaries (Helium, Chrome, Edge, Firefox, …) | Not used |
+| System default browser | Never `xdg-open` / OS URL opener |
 
 **Normative constraints:**
 
-- **Helium-only.** No secondary Chromium-like discover path.
-- **No system-browser fallback.** After the resolve/ensure pipeline fails, `Run` / launch returns a clear error.
-- Browser bits live in **workspaced’s tool store** (or a pre-existing Helium install), not inside the eletrocromo module tree.
-
-### Host resolve / ensure pipeline
-
-```text
-1. Local Helium
-   LookPath("helium"). If found → use it.
-
-2. Ensure Helium via workspaced
-   a. Locate workspaced binary:
-      - LookPath("workspaced"), else
-      - cached bootstrap under XDG cache (e.g. ~/.cache/eletrocromo/workspaced/<pinned-version>/workspaced), else
-      - download pinned workspaced release asset for GOOS/GOARCH into that cache
-        (GitHub Releases for lucasew/workspaced; same idea as workspaced’s setup script).
-      Verify before exec (at least checksum / release digest policy — no curl|bash).
-   b. Resolve Helium path (installs if missing):
-        workspaced tool which helium-browser helium
-      Registry tool name: **helium-browser** (not a home lazy alias, not raw github: OS fork).
-      Binary name: **helium**.
-   c. Use the printed absolute path.
-
-3. Fail closed
-   Return an error that explains: need Helium, or network/workspaced ensure failed.
-   Never fall back to Chrome or the system default browser.
-```
-
-**Launch** (always, once a binary path is chosen):
-
-```text
-<bin> --app <url>
-```
-
-Use **`tool which`** (not only `tool with`) so eletrocromo **owns** the browser process (`Start`/`Wait`) for window-owned lifetime and relaunch. `tool with helium-browser -- helium --app …` is acceptable only as an equivalent if process ownership requirements are met; prefer which → exec.
+- **OS web view only.** No browser discovery and no download of a browser.
+- **No listening port** on desktop `Run()`.
+- Profile directory is `ProfileDir(App.ID)` (cookies, storage, cache).
+- On macOS, call `Run` from `main` so AppKit events run on the main thread.
 
 **Defaults:**
 
 | Policy | Decision |
 |--------|----------|
-| Ensure when Helium/secondary missing | **On** for normal desktop `Run` (product magic on first launch) |
-| Offline / ensure failure | Hard error; no degraded browser |
-| Prefer local | Step 1 never hits the network |
-| Workspaced integration (runtime library) | **Subprocess CLI only** for Helium ensure — do not import `github.com/lucasew/workspaced` into the **importable library** path used by apps at `Run()` |
+| Missing web view framework | Hard error |
+| Workspaced integration (runtime library) | Do not import `github.com/lucasew/workspaced` into the library path used by apps at `Run()` |
 | Workspaced integration (packaging CLI) | **`cmd/eletrocromo` may import** workspaced packages (e.g. `taskgroup`) and still **subprocess** `workspaced tool which` for icon/raster tools |
-| Registry vs GitHub ref | Always **`helium-browser`** (catalog/registry); multi-OS artifacts are workspaced’s job |
-| Home `lazy_tools.helium_browser` | Out of library path; users may still have personal shims, but ensure must not require them |
-| Version pins | **Pin workspaced** release used for bootstrap in code/config. Helium version follows workspaced catalog resolution unless a pin is added later |
-| Cache | Bootstrap binary under eletrocromo XDG cache; Helium install under workspaced’s normal tool store |
-| Tests / CI | May disable ensure (option/env) so unit tests never download browsers; discovery-only tests remain pure |
+| Tests / CI | Unit tests substitute the window opener. They do not open a real view |
 
 **Security / trust:**
 
-- Bootstrapping workspaced is a **trust decision**: pin version + verify artifact; document the pin.
-- First run may download **workspaced** and **Helium** (large); log progress; reuse cache afterward.
-- Token URL must not be passed to untrusted openers; only the resolved `--app` host.
+- Desktop requests are in-process. The session cookie is attached before the auth check so a request without that wrapper still fails closed.
+- NoUI token URLs stay on loopback for packaged hosts. Do not hand them to an untrusted opener.
 
 ### Auth details (normative intent)
 
@@ -250,9 +208,9 @@ Tray and lifecycle must work **without CGo**. If a approach requires CGo, it is 
 |----------|--------------------------|-------------------|
 | **Linux** | Full vision: bind, auth, launch, both lifetime modes, tray Open/Quit, docs, dogfood example | Icon matrix; desktop package recipes documented (nFPM/Snap/etc. are user-wired) |
 | **Windows** | Best-effort later; launching UI + server may work; no tray/lifecycle parity promise | Icon matrix includes `.ico`; PE embedding left to user/GR |
-| **macOS** | Best-effort Helium `Run()`; no tray/lifecycle parity promise | Icon matrix includes `.icns`; **`build macos`** JIT unsigned Debug `.app` (WKWebView host) |
-| **Android** | N/A (not Helium desktop) | APK via packaging CLI; launcher mipmaps from icon pipeline |
-| **iOS / iPadOS** | N/A (not Helium desktop) | Scaffold: `build ios` JIT Debug `.app` (WKWebView + in-process c-archive). Not grilled. |
+| **macOS** | Best-effort WKWebView `Run()`; no tray/lifecycle parity promise. Call `Run` from `main` | Icon matrix includes `.icns`; **`build macos`** JIT unsigned Debug `.app` (separate WKWebView host, NoUI) |
+| **Android** | N/A (packaged WebView host, NoUI) | APK via packaging CLI; launcher mipmaps from icon pipeline |
+| **iOS / iPadOS** | N/A (packaged WKWebView host, NoUI) | Scaffold: `build ios` JIT Debug `.app` (WKWebView + in-process c-archive). Not grilled. |
 
 ## v1 done checklist (Linux desktop runtime)
 
@@ -260,7 +218,7 @@ v1 **desktop library** is **complete** when all of the following hold:
 
 1. **Entry:** constructor/API for `http.Handler` and for `*http.Server`; library owns loopback bind.
 2. **Auth:** always on; documented handshake; fail-closed.
-3. **Launch:** Helium only (PATH or workspaced ensure of `helium-browser`); `--app` only; **hard error** if still no host (no other browsers, no system fallback).
+3. **Launch:** OS web view via lewkit; in-process handler; **hard error** if the framework is missing (no browser binary, no system fallback).
 4. **Default lifetime:** window close ⇒ process exit.
 5. **Background mode:** explicit flag; process outlives window.
 6. **Tray:** Open and Quit work without address-bar token ritual.
@@ -382,7 +340,7 @@ dist/icons/
 ### Conversion stack
 
 - Prefer **in-process Go libraries** when adequate.
-- Otherwise **ensure tools via workspaced** (same mental model as Helium ensure).
+- Otherwise **ensure tools via workspaced**.
 - Fail closed with a clear “install/ensure X or pass a PNG” style error when a required converter is missing.
 
 ### CLI shape (`cmd/eletrocromo`)
@@ -457,7 +415,7 @@ v1 macos non-goals:
 - Camera/mic usage strings, custom URL schemes
 - Native menus beyond system defaults
 - rterm notch / fill-screen
-- Darwin Helium discovery (desktop `Run()` track)
+- A second macOS window stack besides WKWebView (desktop `Run()` and the packaged host both use WebKit, separately)
 
 Success test:
 
@@ -484,7 +442,7 @@ Existing fields remain (`schema_version`, `package_id`, `app_name`, `go_main`, `
 | Entry | `App{Handler, Context, …}.Run()` | Handler **or** `*http.Server` constructors; bind always library-owned |
 | Server | `httptest` | Keep ephemeral loopback; do not hand bind to the app |
 | Auth | Token + cookie; fail-closed | Keep always-on; no opt-out in v1 |
-| Launch | Helium-only resolve + workspaced ensure (in progress / landed per code) | Helium only → `workspaced tool which helium-browser helium` (bootstrap workspaced) → `--app` |
+| Launch | OS web view via lewkit; in-process handler on desktop. NoUI loopback unchanged for packaged hosts | WebKitGTK / WKWebView / WebView2. Missing framework is an error |
 | Lifetime | Context cancel; browser lifecycle partial | Default window-owned; flag background + tray |
 | Tray / lockfile | Absent or partial | Linux v1 requirement |
 | Example | counter / ticker / basic / astro | Template counter + mode flag as dogfood bar |
@@ -496,9 +454,8 @@ Existing fields remain (`schema_version`, `package_id`, `app_name`, `go_main`, `
 
 **Desktop runtime**
 
-- A developer writes only HTTP/template logic and gets a usable Linux “desktop” window **under Helium**.
-- Clean machine with network: first `Run` can bootstrap workspaced + ensure `helium-browser`, then open `--app` (no system browser).
-- Offline with no local host: fails loudly; never opens the default browser.
+- A developer writes only HTTP/template logic and gets a usable Linux desktop window under WebKitGTK.
+- A machine without WebKitGTK fails loudly. `Run` never opens a browser binary or the default browser.
 - CGO=0 builds and runs the dogfood counter on Linux.
 - Background mode is usable daily without ever typing the loopback token URL.
 - The project description never requires “we’ll add native menus next” to feel complete.
@@ -508,7 +465,7 @@ Existing fields remain (`schema_version`, `package_id`, `app_name`, `go_main`, `
 - `eletrocromo build icons` with no config produces a complete `dist/icons` tree from the default mark.
 - With `icon` / `--icon`, the same tree is derived from the user master (pad+center).
 - `eletrocromo build android` produces an APK whose launcher icon is not the Android system placeholder when icons were generated.
-- `eletrocromo build macos` on a Mac with Xcode produces an unsigned Debug `.app` whose icon is the generated `macos/icon.icns` and whose window is WKWebView (not Helium).
+- `eletrocromo build macos` on a Mac with Xcode produces an unsigned Debug `.app` whose icon is the generated `macos/icon.icns` and whose window is the host WKWebView (the Go child is NoUI).
 - `--go-only` for macos writes the host tree + darwin Go binary without Xcode.
 - Documented GoReleaser hook can call `build icons` without eletrocromo owning the release.
 
@@ -516,11 +473,9 @@ Existing fields remain (`schema_version`, `package_id`, `app_name`, `go_main`, `
 
 **Desktop**
 
-1. **Launch contract:** Helium only; remove other Chromium-likes and system-browser fallback; hard error.
-2. **Ensure via workspaced on PATH:** `tool which helium-browser helium` → `--app`.
-3. **Bootstrap workspaced binary** (pinned + verified cache) when missing.
-4. Window-owned lifetime; background + tray + lockfile.
-5. Handler / `*http.Server` constructors; template counter dogfood; README ↔ SPEC.
+1. **Launch contract:** OS web view via lewkit. No browser binary. Hard error if the framework is missing.
+2. Window-owned lifetime; background + tray + lockfile.
+3. Handler / `*http.Server` constructors; template counter dogfood; README ↔ SPEC.
 
 **Packaging (can proceed in parallel with desktop tray work)**
 
@@ -538,11 +493,11 @@ Resolved by engineering when building, not by re-litigating product meaning:
 
 - Exact flag names (`--tray`, `--background`, `ELETROCROMO_NO_ENSURE`, …)
 - Lockfile path and resume protocol (signal, local socket, etc.)
-- How window-death is detected under CGo-less constraints (browser process wait, WM heuristics, …)
+- How window-death is detected under CGo-less constraints (web view `Done`, WM heuristics, …)
 - Whether tray is a build-tagged Linux file set vs always compiled stubs
 - Precise constructor names and option functional options vs struct fields
 - Workspaced release pin value, checksum source, and cache layout under XDG
-- Whether Helium catalog version is left floating to workspaced or pinned later
+- Which lewkit release eletrocromo requires
 - Exact PNG/ICO/ICNS size lists and Android density set
 - Which workspaced catalog tool names back SVG/ICO/ICNS conversion
 - Precise “outputs missing” checklist for skip-vs-generate
@@ -559,5 +514,6 @@ Resolved by engineering when building, not by re-litigating product meaning:
 *Aligned in grill sessions. Do not expand scope into non-goals without a new explicit decision.*
 
 - 2026-07-20: Helium-only desktop shell. workspaced `helium-browser`. No other Chromium-likes. No system-browser fallback for desktop `Run()`.
+- 2026-09-24: Desktop `Run()` uses lewkit `x/driver/webview` (in-process, no browser binary). Packaged Android, iOS, and macOS hosts stay on loopback + `ELETROCROMO_NO_UI`.
 - 2026-07-23: Icon matrix. `build icons` / `build android`. Default mark/lockup. GoReleaser hooks, not a plugin. taskgroup import for packaging only.
 - 2026-08-22: JIT unsigned Debug `.app`. WKWebView host. Same json as android. rterm packaging tricks, not rterm UI. Off-loopback links open in the default browser.

@@ -5,21 +5,24 @@
 # eletrocromo
 
 A simpler approach to desktop apps without Electron or Wails: pure Go HTTP
-handler + local loopback server + **Helium** `--app` window.
+handler shown in the system web view (WebKitGTK, WKWebView, or WebView2).
 
 See [SPEC.md](SPEC.md) for the product contract.
 
 ## Architecture
 
-On start, eletrocromo wraps your `http.Handler` with always-on token auth, binds
-loopback, and opens the UI with Helium `--app` and a **per-app profile**:
+On desktop, eletrocromo opens a system web view and serves your `http.Handler`
+in-process, with a **per-app profile** for cookies and storage. Nothing listens
+on a port. Packaged Android, iOS, and macOS hosts still use loopback: set
+`ELETROCROMO_NO_UI` (or `App.NoUI`) and read `ELETROCROMO_READY`.
 
-1. Require reverse-domain `App.ID` (e.g. `br.tec.lew.myapp`) → isolated
-   `--user-data-dir` under the OS data dir (`…/eletrocromo/profiles/<id>`)
-2. **Helium** on `PATH`, else ensure via **workspaced**
-   (`tool which helium-browser helium`), bootstrapping workspaced if needed
-3. Start server only after Helium resolves; fail if Helium exits on startup
-4. Never Chrome/Edge/system browser
+1. Require reverse-domain `App.ID` (e.g. `br.tec.lew.myapp`) → profile under
+   the OS data dir (`…/eletrocromo/profiles/<id>`)
+2. Open WebKitGTK (Linux), WKWebView (macOS), or WebView2 (Windows) via
+   [lewkit](https://github.com/lewtec/lewkit)
+3. Window close ends the process
+
+On macOS, call `App.Run` from `main`. The library binds the main thread for AppKit.
 
 ```go
 app := eletrocromo.App{
@@ -30,14 +33,13 @@ app := eletrocromo.App{
 log.Fatal(app.Run())
 ```
 
-Set `ELETROCROMO_NO_ENSURE=1` to disable network ensure (tests/CI).
-Set `ELETROCROMO_WORKSPACED=/path/to/workspaced` to pin the ensure helper binary.
+Set `ELETROCROMO_NO_UI=1` to serve loopback only (packaged mobile and Mac hosts).
 
 ## Try it
 
 Each example is its own Go module under `examples/*` (`go -C examples/<name> run .`).
 
-Template counter dogfood (Helium-first launch):
+Template counter dogfood (system web view):
 
 ```bash
 mise run example:counter
@@ -168,7 +170,7 @@ WebView. Packaging lives in `internal/gen/apk/` + `internal/icons/` +
 
 ### macOS `.app` (straight build)
 
-Same config and handshake as the APK. The host is a WKWebView shell, not Helium.
+Same config and handshake as the APK. The host is its own WKWebView shell and runs the Go app with `ELETROCROMO_NO_UI`.
 Full `.app` needs **Xcode** and **xcodegen** on a Mac. Without them:
 
 ```bash

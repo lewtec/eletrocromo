@@ -23,7 +23,7 @@ var (
 )
 
 // ValidateAppID checks reverse-domain application identity (e.g. br.tec.lew.counter).
-// The same string isolates Helium --user-data-dir and is intended for future APK package names.
+// The same string isolates the desktop web view profile and is the packaged application id.
 func ValidateAppID(id string) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -41,7 +41,7 @@ func ValidateAppID(id string) error {
 	return nil
 }
 
-// ProfileDir returns the Helium --user-data-dir for appID:
+// ProfileDir returns the desktop web view profile directory for appID:
 // $XDG_DATA_HOME/eletrocromo/profiles/<appID> (or OS data-dir equivalent).
 func ProfileDir(appID string) (string, error) {
 	if err := ValidateAppID(appID); err != nil {

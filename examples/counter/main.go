@@ -1,4 +1,4 @@
-// Counter is a dogfood app for eletrocromo host resolve / Helium --app launch.
+// Counter is a dogfood app for the desktop system web view.
 //
 //	mise run example:counter
 //	# or: go -C examples/counter run .
@@ -100,7 +100,7 @@ func main() {
 		Handler: mux,
 		Context: ctx,
 	}
-	log.Printf("counter example: launching app window (Helium-first host resolve)")
+	log.Printf("counter example: opening web view")
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
