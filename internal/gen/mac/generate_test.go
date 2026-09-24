@@ -31,6 +31,7 @@ func TestCreate_WritesHost(t *testing.T) {
 		"Sources/AppDelegate.swift",
 		"Sources/ServerProcess.swift",
 		"Sources/MainWindow.swift",
+		"Sources/HostShared.swift",
 	}
 	for _, rel := range mustExist {
 		if _, err := os.Stat(filepath.Join(out, rel)); err != nil {

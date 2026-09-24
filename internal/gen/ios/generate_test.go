@@ -61,6 +61,7 @@ func TestCreate_WritesHost(t *testing.T) {
 		"Sources/ServerProcess.swift",
 		"Sources/RootViewController.swift",
 		"Sources/eletrocromo-Bridging-Header.h",
+		"Sources/HostShared.swift",
 		"Assets.xcassets/AppIcon.appiconset/Contents.json",
 		"Assets.xcassets/SplashLogo.imageset/Contents.json",
 		"LaunchScreen.storyboard",
