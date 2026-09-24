@@ -176,6 +176,26 @@ func TestCreate_RequiresForceWhenNonEmpty(t *testing.T) {
 	}
 }
 
+func TestCreate_NonEmptyOutDirBeforeBadCapabilities(t *testing.T) {
+	out := t.TempDir()
+	if err := os.WriteFile(filepath.Join(out, "keep"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := Create(Options{
+		OutDir: out,
+		Config: Config{
+			PackageID: "br.tec.lew.x",
+			AppName:   "X",
+			Capabilities: common.Capabilities{
+				URL: &common.URLCap{Schemes: []string{}},
+			},
+		},
+	})
+	if !errors.Is(err, ErrOutDirNotEmpty) {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestCreate_DefaultAppNameFromID(t *testing.T) {
 	out := t.TempDir()
 	if err := Create(Options{
