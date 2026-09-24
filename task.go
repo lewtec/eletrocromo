@@ -2,10 +2,17 @@ package eletrocromo
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"time"
+
+	"github.com/lewtec/lewkit/x/driver/webview"
 )
+
+// errInvalidURLScheme is returned when a launch URL is not http(s).
+var errInvalidURLScheme = errors.New("invalid URL scheme")
 
 // Task represents a unit of work that can be executed in the background.
 // Implementations must respect the provided context for cancellation and timeout.
@@ -34,11 +41,11 @@ func NewKeepAliveTask(d time.Duration) Task {
 	})
 }
 
-// NewBrowserLaunchTask launches Helium for urlStr using the appID profile
+// NewBrowserLaunchTask opens urlStr in a system web view using the appID profile
 // (same reverse-domain identity as App.ID / ProfileDir).
 func NewBrowserLaunchTask(urlStr, appID string) Task {
 	return FunctionTask(func(ctx context.Context) error {
-		// Task requires respecting cancellation; do not open a browser
+		// Task requires respecting cancellation; do not open a window
 		// after App.Run has already begun shutdown.
 		if err := ctx.Err(); err != nil {
 			return err
@@ -52,5 +59,28 @@ func launchBrowserURL(ctx context.Context, urlStr, appID string) error {
 	if err != nil {
 		return fmt.Errorf("parse app url: %w", err)
 	}
-	return LaunchChromium(ctx, u, appID)
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%w: %s", errInvalidURLScheme, u.Scheme)
+	}
+	profileDir, err := ProfileDir(appID)
+	if err != nil {
+		return err
+	}
+	view, err := openDesktopView(ctx, webview.Config{
+		Profile: profileDir,
+		Handler: urlHandler(u),
+	})
+	if err != nil {
+		return err
+	}
+	go func() {
+		select {
+		case <-ctx.Done():
+			if err := view.Close(); err != nil {
+				log.Printf("close web view: %v", err)
+			}
+		case <-view.Done():
+		}
+	}()
+	return nil
 }

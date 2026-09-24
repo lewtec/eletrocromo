@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const testAppID = "br.tec.lew.test"
+
 var ErrTestBoom = errors.New("boom")
 
 func TestFunctionTask_Run(t *testing.T) {
@@ -64,7 +66,7 @@ func TestNewBrowserLaunchTask_RejectsNonHTTPScheme(t *testing.T) {
 	}
 }
 
-// Cancelled context must short-circuit before LaunchChromium (no browser spawn).
+// Cancelled context must short-circuit before the web view opens.
 func TestNewBrowserLaunchTask_RespectsCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

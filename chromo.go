@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lewtec/eletrocromo/driver/open"
+	"github.com/lewtec/lewkit/x/driver/webview"
 )
 
 // App acts as the core controller for the application, managing the lifecycle,
@@ -23,8 +24,8 @@ import (
 // It coordinates background tasks and ensures graceful shutdown.
 type App struct {
 	// ID is the reverse-domain application identity (e.g. "br.tec.lew.counter").
-	// Required. Isolates the Helium --user-data-dir per app and is the intended
-	// APK package name when packaging is added later.
+	// Required. Isolates the desktop web view profile and is the Android
+	// applicationId / Apple bundle id when packaging.
 	ID string
 
 	Handler   http.Handler
@@ -32,9 +33,9 @@ type App struct {
 	WaitGroup sync.WaitGroup
 	Context   context.Context
 
-	// NoUI skips Helium resolve/launch and only serves loopback HTTP.
-	// Used by the Android WebView host (and tests). Also enabled when
-	// ELETROCROMO_NO_UI is 1/true/yes.
+	// NoUI skips the desktop web view and only serves loopback HTTP.
+	// Used by the Android, iOS, and macOS packaged hosts (and tests).
+	// Also enabled when ELETROCROMO_NO_UI is 1/true/yes.
 	NoUI bool
 
 	// OnOpen receives URL/file launches (argv, ELETROCROMO_OPEN, Cache/open.jsonl).
@@ -119,17 +120,16 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Run starts the application and blocks until the context is cancelled.
 //
-// Startup Sequence (desktop):
-//  1. Validates App.ID (reverse-domain) and prepares an isolated Helium profile.
+// Startup sequence (desktop):
+//  1. Validates App.ID (reverse-domain) and prepares an isolated web view profile.
 //  2. Generates a new random AuthToken if one is not already set.
-//  3. Resolves Helium (local PATH or workspaced ensure) — before binding any port.
-//  4. Starts the internal HTTP server (httptest for ephemeral loopback bind).
-//  5. Launches Helium with --user-data-dir + --app; fails Run if the process
-//     exits during a short startup grace (launch failures are not ignored).
-//  6. Blocks until the context is cancelled (including Helium exit), then waits
-//     for background tasks and shuts down the server.
+//  3. Opens the system web view (WebKitGTK, WKWebView, or WebView2) with the
+//     app handler in-process. Nothing listens on a port.
+//  4. Blocks until the context is cancelled or the window closes, then waits
+//     for background tasks.
 //
-// NoUI / ELETROCROMO_NO_UI: skip Helium; bind, print ReadyLinePrefix + URL, wait.
+// NoUI / ELETROCROMO_NO_UI: skip the window; bind loopback, print ReadyLinePrefix
+// + URL, wait. Android, iOS, and packaged macOS hosts use this path.
 func (a *App) Run() error {
 	// Android pure-Go DNS cannot use netd on [::1]:53; set PreferGo + real servers.
 	configureDNSForPlatform()
@@ -154,24 +154,8 @@ func (a *App) Run() error {
 	defer func() { a.Context = prevCtx }()
 
 	noUI := a.NoUI || noUIEnabled()
-
-	var profileDir string
-	var bin string
 	if !noUI {
-		var err error
-		profileDir, err = ProfileDir(a.ID)
-		if err != nil {
-			return err
-		}
-		// Resolve Helium first: ensure can take a long time (download workspaced +
-		// helium-browser). Do not open a listening server until we know we can
-		// open a window; failures must not leave a loopback port up with a token.
-		log.Printf("resolving Helium host…")
-		bin, err = resolveBrowserHost(ctx)
-		if err != nil {
-			return err
-		}
-		log.Printf("Helium host: %s (profile %s)", bin, profileDir)
+		return a.runDesktop(ctx, cancel)
 	}
 
 	ts := httptest.NewUnstartedServer(a)
@@ -212,52 +196,62 @@ func (a *App) Run() error {
 		}
 	}()
 
-	if noUI {
-		// Machine-parseable line on stdout without log timestamps (Android host).
-		// Also log for humans / tests that capture log.Writer().
-		fmt.Fprintln(os.Stdout, ReadyLinePrefix+link)
-		log.Print(ReadyLinePrefix + link)
-		// Optional side channel: write the URL to a file (stdout can block or be
-		// lost under ProcessBuilder; Android shell sets ELETROCROMO_READY_FILE).
-		if path := strings.TrimSpace(os.Getenv("ELETROCROMO_READY_FILE")); path != "" {
-			if err := os.WriteFile(path, []byte(link+"\n"), 0o600); err != nil {
-				log.Printf("ELETROCROMO_READY_FILE: %v", err)
-			}
+	// Machine-parseable line on stdout without log timestamps (packaged hosts).
+	// Also log for humans / tests that capture log.Writer().
+	fmt.Fprintln(os.Stdout, ReadyLinePrefix+link)
+	log.Print(ReadyLinePrefix + link)
+	// Optional side channel: write the URL to a file (stdout can block or be
+	// lost under ProcessBuilder; Android shell sets ELETROCROMO_READY_FILE).
+	if path := strings.TrimSpace(os.Getenv("ELETROCROMO_READY_FILE")); path != "" {
+		if err := os.WriteFile(path, []byte(link+"\n"), 0o600); err != nil {
+			log.Printf("ELETROCROMO_READY_FILE: %v", err)
 		}
-		<-ctx.Done()
-		a.WaitGroup.Wait()
-		return nil
 	}
+	<-ctx.Done()
+	a.WaitGroup.Wait()
+	return nil
+}
 
-	win, err := startAppWindow(bin, link, profileDir)
+// runDesktop opens the system web view and blocks until it closes or ctx ends.
+// The handler runs in-process. There is no loopback listener on this path.
+func (a *App) runDesktop(ctx context.Context, cancel context.CancelFunc) error {
+	profileDir, err := ProfileDir(a.ID)
+	if err != nil {
+		return err
+	}
+	log.Printf("opening web view (profile %s)", profileDir)
+	view, err := openDesktopView(ctx, webview.Config{
+		Profile: profileDir,
+		Handler: a.windowHandler(),
+	})
 	if err != nil {
 		cancel()
 		a.WaitGroup.Wait()
-		return fmt.Errorf("launch Helium: %w", err)
+		return fmt.Errorf("open web view: %w", err)
 	}
-	if err := win.awaitStartup(heliumStartupGrace); err != nil {
-		win.stop()
-		cancel()
-		a.WaitGroup.Wait()
-		return err
-	}
-	// After a healthy start, Helium exit cancels the app (window-owned lite).
-	win.watchExit(func(exitErr error) {
-		if exitErr != nil {
-			log.Printf("Helium exited: %v", exitErr)
-		} else {
-			log.Printf("Helium exited")
+	go func() {
+		select {
+		case <-view.Done():
+			log.Printf("web view closed")
+			cancel()
+		case <-ctx.Done():
 		}
-		cancel()
-	})
-
-	<-ctx.Done()
-	// Ctrl+C / parent cancel: tear down the process group so helpers do not leak.
-	win.stop()
+	}()
+	waitDesktopView(ctx, view)
+	if err := view.Close(); err != nil {
+		log.Printf("close web view: %v", err)
+	}
+	cancel()
 	a.WaitGroup.Wait()
 	return nil
 }
 
 func noUIEnabled() bool {
 	return envTruthy("ELETROCROMO_NO_UI")
+}
+
+// envTruthy reports whether the named env var is a common true token (1/true/yes).
+func envTruthy(key string) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
 }

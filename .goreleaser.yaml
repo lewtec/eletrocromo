@@ -32,7 +32,7 @@ builds:
         -X github.com/lewtec/eletrocromo/internal/version.Date={{ .CommitDate }}
         -X github.com/lewtec/eletrocromo/internal/version.BuiltBy=goreleaser
 
-  # Desktop Helium binaries for each example (same GOOS/GOARCH as the CLI).
+  # Desktop example binaries (same GOOS/GOARCH as the CLI).
   # Android APKs and macOS/iOS .app zips are attached by Autorelease, not here.
   - id: example-basic
     <<: &example-build
