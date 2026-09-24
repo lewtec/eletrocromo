@@ -2,30 +2,13 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/gen/mac"
-	"github.com/lewtec/eletrocromo/internal/icons"
 	"github.com/spf13/cobra"
 )
 
 func newBuildMacOSCmd() *cobra.Command {
-	var (
-		configPath  string
-		id          string
-		name        string
-		goMain      string
-		version     string
-		code        int
-		out         string
-		workDir     string
-		keepWorkDir bool
-		goOnly      bool
-		iconPath    string
-		iconOutput  string
-		refresh     bool
-	)
+	var f buildCmdFlags
 
 	cmd := &cobra.Command{
 		Use:   "macos",
@@ -50,50 +33,21 @@ Example (from examples/counter):
   eletrocromo build macos --out ../../dist/Counter.app`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cwd, err := os.Getwd()
+			cwd, baseDir, apkCfg, iconSrc, iconOut, err := f.load(cmd)
 			if err != nil {
 				return err
 			}
+			cfg := macConfigFromAPK(apkCfg)
+			outApp := f.hostOutApp(cfg.AppName, cfg.PackageID, cwd)
 
-			apkCfg, baseDir, err := loadAPKConfig(cwd, configPath, id, name, goMain, version, code, cmd)
-			if err != nil {
-				return err
-			}
-			if strings.TrimSpace(apkCfg.PackageID) == "" {
-				return fmt.Errorf("%w: set package_id in eletrocromo.json or pass --id", ErrMissingPackageID)
-			}
-
-			iconSrc := resolveIconSource(cwd, iconPath, baseDir, apkCfg.Icon)
-			iconOut := resolveIconOutput(cwd, iconOutput)
-
-			cfg := mac.Config{
-				PackageID:    apkCfg.PackageID,
-				AppName:      apkCfg.AppName,
-				VersionName:  apkCfg.VersionName,
-				VersionCode:  apkCfg.VersionCode,
-				GoMain:       apkCfg.GoMain,
-				Icon:         apkCfg.Icon,
-				Capabilities: apkCfg.Capabilities,
-			}
-
-			outApp := strings.TrimSpace(out)
-			if outApp == "" && !goOnly {
-				appName := cfg.AppName
-				if appName == "" {
-					parts := strings.Split(cfg.PackageID, ".")
-					appName = parts[len(parts)-1]
-				}
-				outApp = mac.DefaultOutApp(appName, cwd)
-			}
-
-			return runIconsThen(cmd, iconThen{src: iconSrc, out: iconOut, refresh: refresh, name: "macos"}, func(iconRoot string) error {
+			return runIconsThen(cmd, iconThen{src: iconSrc, out: iconOut, refresh: f.refresh, name: "macos"}, func(iconRoot string) error {
 				result, err := mac.Build(mac.BuildOptions{
 					Config:      cfg,
 					BaseDir:     baseDir,
-					WorkDir:     workDir,
-					KeepWorkDir: keepWorkDir || workDir != "",
+					WorkDir:     f.workDir,
+					KeepWorkDir: f.keepWorkDir || f.workDir != "",
 					OutApp:      outApp,
-					GoOnly:      goOnly,
+					GoOnly:      f.goOnly,
 					IconRoot:    iconRoot,
 					Stdout:      cmd.OutOrStdout(),
 					Stderr:      cmd.ErrOrStderr(),
@@ -102,7 +56,7 @@ Example (from examples/counter):
 					return err
 				}
 				outw := cmd.OutOrStdout()
-				if goOnly {
+				if f.goOnly {
 					if _, err := fmt.Fprintf(outw, "helper: %s\n", result.HelperPath); err != nil {
 						return err
 					}
@@ -115,19 +69,15 @@ Example (from examples/counter):
 		},
 	}
 
-	cmd.Flags().StringVar(&configPath, "config", "", "path to eletrocromo.json (default: ./eletrocromo.json if present)")
-	cmd.Flags().StringVar(&id, "id", "", "package id / CFBundleIdentifier (overrides config)")
-	cmd.Flags().StringVar(&name, "name", "", "app display name (overrides config)")
-	cmd.Flags().StringVar(&goMain, "go-main", ".", "Go main package directory (overrides config)")
-	cmd.Flags().StringVar(&version, "version", "", "CFBundleShortVersionString (default: git describe / goreleaser -X / devel)")
-	cmd.Flags().IntVar(&code, "code", 0, "CFBundleVersion (default: semver map or git rev-list count)")
-	cmd.Flags().StringVar(&out, "out", "", "output .app path (default: dist/<app_name>.app)")
-	cmd.Flags().StringVar(&workDir, "workdir", "", "XcodeGen project dir (default: temp; kept if set)")
-	cmd.Flags().BoolVar(&keepWorkDir, "keep-workdir", false, "do not delete temp workdir after success")
-	cmd.Flags().BoolVar(&goOnly, "go-only", false, "only cross-compile darwin Go helper (skip Xcode)")
-	cmd.Flags().StringVar(&iconPath, "icon", "", "master PNG/JPEG (overrides config icon)")
-	cmd.Flags().StringVar(&iconOutput, "output", icons.DefaultOutputDir, "icon tree root")
-	cmd.Flags().BoolVar(&refresh, "refresh-icons", false, "regenerate icons even if present")
+	f.bind(cmd, buildFlagHelp{
+		id:      "package id / CFBundleIdentifier (overrides config)",
+		name:    "app display name (overrides config)",
+		version: "CFBundleShortVersionString (default: git describe / goreleaser -X / devel)",
+		code:    "CFBundleVersion (default: semver map or git rev-list count)",
+		out:     "output .app path (default: dist/<app_name>.app)",
+		workDir: "XcodeGen project dir (default: temp; kept if set)",
+		goOnly:  "only cross-compile darwin Go helper (skip Xcode)",
+	})
 
 	return cmd
 }
