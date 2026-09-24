@@ -16,6 +16,6 @@ require (
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/lewtec/lewkit v0.0.0-20260924020104-e8ed696cdc41 // indirect
+	github.com/lewtec/lewkit v0.0.0-20260924165650-c10290a0a35c // indirect
 	golang.org/x/text v0.42.0 // indirect
 )

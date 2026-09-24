@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/lewtec/lewkit v0.0.0-20260924020104-e8ed696cdc41
+	github.com/lewtec/lewkit v0.0.0-20260924165650-c10290a0a35c
 	github.com/lucasew/workspaced v0.0.0-20260916163621-96ab77cd3132
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/image v0.44.0

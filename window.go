@@ -8,9 +8,7 @@ import (
 	"runtime"
 
 	"github.com/lewtec/lewkit/x/driver/webview"
-	_ "github.com/lewtec/lewkit/x/driver/webview/webkitgtk"
-	_ "github.com/lewtec/lewkit/x/driver/webview/webview2"
-	_ "github.com/lewtec/lewkit/x/driver/webview/wkwebview"
+	_ "github.com/lewtec/lewkit/x/driver/webview/prelude"
 	"github.com/lewtec/lewkit/x/thread"
 )
 
