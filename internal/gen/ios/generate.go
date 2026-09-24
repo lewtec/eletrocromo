@@ -57,5 +57,8 @@ func Create(opts Options) error {
 	if err != nil {
 		return err
 	}
-	return common.MaterializeHost(templateFS, data, opts.OutDir, opts.Force, raw)
+	if err := common.MaterializeHost(templateFS, data, opts.OutDir, opts.Force, raw); err != nil {
+		return err
+	}
+	return common.WriteHostSharedSwift(opts.OutDir)
 }
