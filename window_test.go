@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -109,6 +110,57 @@ func TestRun_DesktopServesHandler(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run did not return")
+	}
+}
+
+func TestWindowHandler_RoutesViewURL(t *testing.T) {
+	var seenPath, seenOp, seenHost string
+	app := &App{
+		AuthToken: "secret",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			seenPath = r.URL.Path
+			seenHost = r.Host
+			if err := r.ParseForm(); err != nil {
+				t.Errorf("parse form: %v", err)
+			}
+			seenOp = r.Form.Get("op")
+			switch r.URL.Path {
+			case "/go":
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+			case "/away":
+				http.Redirect(w, r, "https://example.com/docs", http.StatusSeeOther)
+			default:
+				w.WriteHeader(http.StatusOK)
+			}
+		}),
+	}
+	handler := app.windowHandler()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "app://view9/go", strings.NewReader("op=inc"))
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if rec.Header().Get("Location") != "app://view9/" {
+		t.Fatalf("location %q", rec.Header().Get("Location"))
+	}
+	if seenPath != "/go" || seenOp != "inc" || seenHost != "127.0.0.1" {
+		t.Fatalf("path %q op %q host %q", seenPath, seenOp, seenHost)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "app://view9/away", nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Header().Get("Location") != "https://example.com/docs" {
+		t.Fatalf("external location %q", rec.Header().Get("Location"))
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "app://view9", nil)
+	handler.ServeHTTP(rec, req)
+	if seenPath != "/" {
+		t.Fatalf("empty path became %q", seenPath)
 	}
 }
 
