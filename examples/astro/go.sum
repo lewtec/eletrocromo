@@ -20,8 +20,8 @@ github.com/google/pprof v0.0.0-20230207041349-798e818bf904 h1:4/hN5RUoecvl+RmJRE
 github.com/google/pprof v0.0.0-20230207041349-798e818bf904/go.mod h1:uglQLonpP8qtYCYyzA+8c/9qtqgA3qsXGYqCPKARAFg=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/lewtec/lewkit v0.0.0-20260924165650-c10290a0a35c h1:RQiAHfn+Mz/hT9rdFku/Meaef3Wbb2xojxrFuBiSo2s=
-github.com/lewtec/lewkit v0.0.0-20260924165650-c10290a0a35c/go.mod h1:0N8OSgxa40I4eQk1zlku8z2BAMwfMKOaPTltiiyktQo=
+github.com/lewtec/lewkit v0.0.0-20260924172916-363fac3090d3 h1:WjDLcztPyxL955rC7xeo08TlqBLe43lFDLPzaSa6jlk=
+github.com/lewtec/lewkit v0.0.0-20260924172916-363fac3090d3/go.mod h1:0N8OSgxa40I4eQk1zlku8z2BAMwfMKOaPTltiiyktQo=
 github.com/lucasew/orvalho v0.0.0-20260720233020-b4936fd61914 h1:PnD0zBNAUmKQhd45tf6u3awwlWP2QltDDr7hHeZv3q8=
 github.com/lucasew/orvalho v0.0.0-20260720233020-b4936fd61914/go.mod h1:gHNREX9Q6czkMcop43F9ViJR81mU/2wfMK/3ZMISrz4=
 github.com/mitchellh/go-wordwrap v1.0.1 h1:TLuKupo69TCn6TQSyGxwI1EblZZEsQ0vMlAFQflz0v0=

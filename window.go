@@ -1,6 +1,7 @@
 package eletrocromo
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -51,8 +52,99 @@ func adaptViewRequest(next http.Handler) http.Handler {
 		if r.Header.Get("Content-Type") == "" && requestHasBody(r.Method) {
 			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		}
-		next.ServeHTTP(&viewResponse{ResponseWriter: w, origin: origin}, r)
+		rec := serveView(next, r)
+		for range 8 {
+			if !isRedirect(rec.status) {
+				break
+			}
+			target, ok := sameOriginTarget(origin, r, rec.header.Get("Location"))
+			if !ok {
+				break
+			}
+			r.Method = http.MethodGet
+			r.URL = target
+			r.Host = target.Host
+			r.RequestURI = target.RequestURI()
+			r.Body = http.NoBody
+			r.ContentLength = 0
+			r.Header.Del("Content-Type")
+			rec = serveView(next, r)
+		}
+		out := &viewResponse{ResponseWriter: w, origin: origin}
+		for key, values := range rec.header {
+			for _, value := range values {
+				out.Header().Add(key, value)
+			}
+		}
+		out.WriteHeader(rec.status)
+		if rec.body.Len() > 0 {
+			_, _ = out.Write(rec.body.Bytes())
+		}
 	})
+}
+
+type bufferedResponse struct {
+	header http.Header
+	status int
+	body   bytes.Buffer
+	wrote  bool
+}
+
+func (b *bufferedResponse) Header() http.Header {
+	if b.header == nil {
+		b.header = make(http.Header)
+	}
+	return b.header
+}
+
+func (b *bufferedResponse) WriteHeader(status int) {
+	if b.wrote {
+		return
+	}
+	b.wrote = true
+	b.status = status
+}
+
+func (b *bufferedResponse) Write(payload []byte) (int, error) {
+	if !b.wrote {
+		b.WriteHeader(http.StatusOK)
+	}
+	return b.body.Write(payload)
+}
+
+func serveView(next http.Handler, r *http.Request) *bufferedResponse {
+	rec := &bufferedResponse{status: http.StatusOK}
+	next.ServeHTTP(rec, r)
+	if !rec.wrote {
+		rec.WriteHeader(http.StatusOK)
+	}
+	return rec
+}
+
+func isRedirect(status int) bool {
+	return status == http.StatusMovedPermanently ||
+		status == http.StatusFound ||
+		status == http.StatusSeeOther ||
+		status == http.StatusTemporaryRedirect ||
+		status == http.StatusPermanentRedirect
+}
+
+func sameOriginTarget(origin *url.URL, current *http.Request, loc string) (*url.URL, bool) {
+	u, err := url.Parse(loc)
+	if err != nil {
+		return nil, false
+	}
+	if u.IsAbs() && !sameViewHost(u) && (origin == nil || u.Scheme != origin.Scheme || u.Host != origin.Host) {
+		return nil, false
+	}
+	if !u.IsAbs() && (u.Path == "" || u.Path[0] != '/') && current != nil && current.URL != nil {
+		u = current.URL.ResolveReference(u)
+	}
+	path := u.Path
+	if path == "" {
+		path = "/"
+	}
+	return &url.URL{Scheme: "http", Host: "127.0.0.1", Path: path, RawQuery: u.RawQuery}, true
 }
 
 func requestOrigin(r *http.Request) *url.URL {

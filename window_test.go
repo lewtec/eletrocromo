@@ -114,23 +114,27 @@ func TestRun_DesktopServesHandler(t *testing.T) {
 }
 
 func TestWindowHandler_RoutesViewURL(t *testing.T) {
-	var seenPath, seenOp, seenHost string
+	var paths []string
+	var seenOp, seenHost string
 	app := &App{
 		AuthToken: "secret",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			seenPath = r.URL.Path
+			paths = append(paths, r.URL.Path)
 			seenHost = r.Host
 			if err := r.ParseForm(); err != nil {
 				t.Errorf("parse form: %v", err)
 			}
-			seenOp = r.Form.Get("op")
+			if op := r.Form.Get("op"); op != "" {
+				seenOp = op
+			}
 			switch r.URL.Path {
 			case "/go":
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 			case "/away":
 				http.Redirect(w, r, "https://example.com/docs", http.StatusSeeOther)
 			default:
-				w.WriteHeader(http.StatusOK)
+				w.Header().Set("Content-Type", "text/html")
+				_, _ = io.WriteString(w, "page "+r.URL.Path)
 			}
 		}),
 	}
@@ -139,14 +143,14 @@ func TestWindowHandler_RoutesViewURL(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "app://view9/go", strings.NewReader("op=inc"))
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusSeeOther {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
-	if rec.Header().Get("Location") != "app://view9/" {
+	if rec.Header().Get("Location") != "" {
 		t.Fatalf("location %q", rec.Header().Get("Location"))
 	}
-	if seenPath != "/go" || seenOp != "inc" || seenHost != "127.0.0.1" {
-		t.Fatalf("path %q op %q host %q", seenPath, seenOp, seenHost)
+	if rec.Body.String() != "page /" || seenOp != "inc" || seenHost != "127.0.0.1" || strings.Join(paths, ",") != "/go,/" {
+		t.Fatalf("body %q op %q host %q paths %v", rec.Body.String(), seenOp, seenHost, paths)
 	}
 
 	rec = httptest.NewRecorder()
@@ -159,8 +163,8 @@ func TestWindowHandler_RoutesViewURL(t *testing.T) {
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "app://view9", nil)
 	handler.ServeHTTP(rec, req)
-	if seenPath != "/" {
-		t.Fatalf("empty path became %q", seenPath)
+	if paths[len(paths)-1] != "/" || rec.Body.String() != "page /" {
+		t.Fatalf("empty path became %q body %q", paths[len(paths)-1], rec.Body.String())
 	}
 }
 
