@@ -41,6 +41,43 @@ func TestApplyHostDefaults_RejectsBadPackageID(t *testing.T) {
 	}
 }
 
+func TestApplyHostDefaults_RejectsEmptyURLScheme(t *testing.T) {
+	t.Parallel()
+	_, err := ApplyHostDefaults(HostConfig{
+		PackageID:   "br.tec.lew.counter",
+		AppName:     "Counter",
+		VersionName: "1.0.0",
+		VersionCode: 1,
+		Capabilities: Capabilities{
+			URL: &URLCap{Schemes: []string{}},
+		},
+	})
+	if !errors.Is(err, ErrCapabilityEmpty) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestApplyIdentityDefaults_SkipsCapabilities(t *testing.T) {
+	t.Parallel()
+	got, err := ApplyIdentityDefaults(HostConfig{
+		PackageID:   "br.tec.lew.counter",
+		VersionName: "1.0.0",
+		VersionCode: 1,
+		Capabilities: Capabilities{
+			URL: &URLCap{Schemes: []string{}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AppName != "counter" || got.GoMain != "." {
+		t.Fatalf("%+v", got)
+	}
+	if got.Capabilities.URL == nil {
+		t.Fatal("dropped capabilities")
+	}
+}
+
 func TestEncodeHostJSON(t *testing.T) {
 	t.Parallel()
 	raw, err := EncodeHostJSON(HostConfig{

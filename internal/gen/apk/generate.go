@@ -7,14 +7,11 @@ package apk
 
 import (
 	"embed"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/lewtec/eletrocromo"
 	"github.com/lewtec/eletrocromo/internal/gen/common"
-	"github.com/lewtec/eletrocromo/internal/version"
 )
 
 //go:embed all:template
@@ -114,29 +111,25 @@ func (data templateData) kotlinDest(rel, destRel string) string {
 }
 
 func normalizeConfig(cfg Config) (Config, error) {
-	cfg.PackageID = strings.TrimSpace(cfg.PackageID)
-	if err := eletrocromo.ValidateAppID(cfg.PackageID); err != nil {
-		return Config{}, fmt.Errorf("package id: %w", err)
+	// Capabilities stay on cfg. Create validates them after out-dir checks;
+	// ApplyHostDefaults would validate them here.
+	id, err := common.ApplyIdentityDefaults(common.HostConfig{
+		PackageID:   cfg.PackageID,
+		AppName:     cfg.AppName,
+		VersionName: cfg.VersionName,
+		VersionCode: cfg.VersionCode,
+		GoMain:      cfg.GoMain,
+		Icon:        cfg.Icon,
+	})
+	if err != nil {
+		return Config{}, err
 	}
-	cfg.AppName = strings.TrimSpace(cfg.AppName)
-	if cfg.AppName == "" {
-		// Last label of reverse-domain (br.tec.lew.counter → counter).
-		parts := strings.Split(cfg.PackageID, ".")
-		cfg.AppName = parts[len(parts)-1]
-	}
-	// Version defaults: prefer goreleaser-style / VCS identity over a fake 0.1.0.
-	if cfg.VersionName == "" || cfg.VersionCode <= 0 {
-		info := version.Resolve()
-		if cfg.VersionName == "" {
-			cfg.VersionName = info.AndroidName()
-		}
-		if cfg.VersionCode <= 0 {
-			cfg.VersionCode = version.AndroidCodeFrom(info.Version, 0)
-		}
-	}
-	if strings.TrimSpace(cfg.GoMain) == "" {
-		cfg.GoMain = "."
-	}
+	cfg.PackageID = id.PackageID
+	cfg.AppName = id.AppName
+	cfg.VersionName = id.VersionName
+	cfg.VersionCode = id.VersionCode
+	cfg.GoMain = id.GoMain
+	cfg.Icon = id.Icon
 	return cfg, nil
 }
 
