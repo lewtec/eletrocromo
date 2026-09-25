@@ -43,6 +43,24 @@ ci = { depends = ["lint", "test", "check"] }
 
 # Release extras: desktop archives come from GoReleaser; these tasks build
 # the packaging targets (APK / .app) and are invoked by Autorelease only.
+[tasks."linux:run"]
+description = "Cross-compile a Linux binary (GOOS=linux) and run it when this machine is Linux"
+usage = '''
+arg "<config>" help="Path to eletrocromo.json"
+'''
+run = '''
+bash scripts/mobile-run.sh linux "${usage_config}"
+'''
+
+[tasks."windows:run"]
+description = "Cross-compile a Windows exe (GOOS=windows). GOARCH defaults to this machine"
+usage = '''
+arg "<config>" help="Path to eletrocromo.json"
+'''
+run = '''
+bash scripts/mobile-run.sh windows "${usage_config}"
+'''
+
 [tasks."mac:run"]
 description = "Build a macOS .app and open it"
 usage = '''
