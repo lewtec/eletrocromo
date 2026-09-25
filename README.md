@@ -113,7 +113,7 @@ Push/`schedule` on `main` run CI only.
 mise run release -- patch   # or next | minor | major
 ```
 
-Artifacts under GitHub Releases, stamped with `internal/version` ldflags:
+Artifacts under GitHub Releases, stamped with `lewkit/x/release`:
 
 - CLI: `eletrocromo_{Linux,Darwin,Windows}_{x86_64,arm64}`
 - Example desktop binaries: `example-{basic,counter,ticker,astro}_{Linux,Darwin,Windows}_{x86_64,arm64}`
@@ -121,16 +121,13 @@ Artifacts under GitHub Releases, stamped with `internal/version` ldflags:
 - Example macOS unsigned Debug `.app` zips: `example-*_macOS.app.zip`
 - Example iOS Simulator Debug `.app` zips: `example-*_iOS-simulator.app.zip`
 
-Version uses the usual Go release stamps (`internal/version`):
+`eletrocromo version` and `--version` print `lewkit/x/release`. Goreleaser sets:
 
 ```text
--X github.com/lewtec/eletrocromo/internal/version.Version={{.Version}}
--X github.com/lewtec/eletrocromo/internal/version.Commit={{.Commit}}
--X github.com/lewtec/eletrocromo/internal/version.Date={{.Date}}
--X github.com/lewtec/eletrocromo/internal/version.BuiltBy=goreleaser
+-X github.com/lewtec/lewkit/x/release.version={{.Version}}
 ```
 
-When unset, `version` / Android `versionName` fall back to module build info and
+The revision suffix comes from the build's `vcs.revision`. Android `versionName` still falls back to module build info and
 `git describe` in the app tree; `versionCode` from semver (`MMmmpp`) or
 `git rev-list --count`.
 

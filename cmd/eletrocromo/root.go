@@ -1,9 +1,11 @@
 package main
 
+import "github.com/lewtec/lewkit/x/cmd"
+
 type root struct {
 	build   *buildCmd
 	android *androidCmd
-	version *versionCmd
+	version *cmd.VersionCmd
 }
 
 func (root) Description() string {

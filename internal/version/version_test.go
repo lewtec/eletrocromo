@@ -46,6 +46,5 @@ func TestResolve_Defaults(t *testing.T) {
 func TestGoBuildLdflags(t *testing.T) {
 	lf := Info{Version: "v1.0.0", Commit: "abc", Date: "2026-01-01T00:00:00Z", BuiltBy: "test"}.GoBuildLdflags()
 	assert.Contains(t, lf, "-s -w")
-	assert.Contains(t, lf, "Version=v1.0.0")
-	assert.Contains(t, lf, "BuiltBy=test")
+	assert.Equal(t, "-s -w -X github.com/lewtec/lewkit/x/release.version=v1.0.0", lf)
 }

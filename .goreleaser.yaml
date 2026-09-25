@@ -27,10 +27,7 @@ builds:
     ldflags:
       - >-
         -s -w
-        -X github.com/lewtec/eletrocromo/internal/version.Version={{ .Version }}
-        -X github.com/lewtec/eletrocromo/internal/version.Commit={{ .Commit }}
-        -X github.com/lewtec/eletrocromo/internal/version.Date={{ .CommitDate }}
-        -X github.com/lewtec/eletrocromo/internal/version.BuiltBy=goreleaser
+        -X github.com/lewtec/lewkit/x/release.version={{ .Version }}
 
   # Desktop example binaries (same GOOS/GOARCH as the CLI).
   # Android APKs and macOS/iOS .app zips are attached by Autorelease, not here.

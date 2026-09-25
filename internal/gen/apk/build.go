@@ -198,7 +198,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 }
 
 // BuildGoLibs cross-compiles the app into workDir/app/src/main/jniLibs/<abi>/libeletrocromo.so.
-// stamp is injected via -ldflags -X (goreleaser-style) when apps import internal/version.
+// stamp is injected via -ldflags -X github.com/lewtec/lewkit/x/release.version.
 func BuildGoLibs(workDir, goMainDir string, abis []string, stamp version.Info, stdout, stderr io.Writer) ([]string, error) {
 	if len(abis) == 0 {
 		abis = DefaultABIs

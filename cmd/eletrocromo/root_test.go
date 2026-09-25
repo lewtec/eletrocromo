@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lewtec/eletrocromo/internal/icons"
+	"github.com/lewtec/lewkit/x/release"
 	"github.com/lewtec/lewkit/x/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -129,7 +129,7 @@ func TestVersionCmd(t *testing.T) {
 		})
 	})
 	require.NoError(t, runErr, out+errText)
-	require.NotEmpty(t, strings.TrimSpace(out+errText))
+	assert.Equal(t, release.Version()+"\n", out)
 }
 
 func TestAndroidCreate_RequiredFlags(t *testing.T) {

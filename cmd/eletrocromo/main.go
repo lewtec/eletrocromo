@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/lewtec/eletrocromo/internal/version"
 	"github.com/lewtec/lewkit/x/cmd"
 )
 
@@ -27,12 +26,6 @@ func main() {
 func run(ctx context.Context, args []string) error {
 	app, err := cmd.Parse[cmd.App[root]](args...)
 	if err != nil {
-		return err
-	}
-	// App --version prints the lewkit release string. This binary's version
-	// is internal/version (goreleaser -X).
-	if app.WantVersion() {
-		_, err := fmt.Fprintln(os.Stdout, version.Resolve().String())
 		return err
 	}
 	return app.Run(ctx)
