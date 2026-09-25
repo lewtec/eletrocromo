@@ -16,7 +16,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lewtec/eletrocromo/driver/open"
-	"github.com/lewtec/lewkit/x/driver/webview"
 )
 
 // App acts as the core controller for the application, managing the lifecycle,
@@ -198,40 +197,6 @@ func (a *App) Run() error {
 		}
 	}
 	<-ctx.Done()
-	a.WaitGroup.Wait()
-	return nil
-}
-
-// runDesktop opens the system web view and blocks until it closes or ctx ends.
-// The handler runs in-process. There is no loopback listener on this path.
-func (a *App) runDesktop(ctx context.Context, cancel context.CancelFunc) error {
-	profileDir, err := ProfileDir(a.ID)
-	if err != nil {
-		return err
-	}
-	log.Printf("opening web view (profile %s)", profileDir)
-	view, err := openDesktopView(ctx, webview.Config{
-		Profile: profileDir,
-		Handler: a.windowHandler(),
-	})
-	if err != nil {
-		cancel()
-		a.WaitGroup.Wait()
-		return fmt.Errorf("open web view: %w", err)
-	}
-	go func() {
-		select {
-		case <-view.Done():
-			log.Printf("web view closed")
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-	waitDesktopView(ctx, view)
-	if err := view.Close(); err != nil {
-		log.Printf("close web view: %v", err)
-	}
-	cancel()
 	a.WaitGroup.Wait()
 	return nil
 }

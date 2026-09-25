@@ -3,12 +3,7 @@ package eletrocromo
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log"
-	"net/url"
 	"time"
-
-	"github.com/lewtec/lewkit/x/driver/webview"
 )
 
 // errInvalidURLScheme is returned when a launch URL is not http(s).
@@ -52,35 +47,4 @@ func NewBrowserLaunchTask(urlStr, appID string) Task {
 		}
 		return launchBrowserURL(ctx, urlStr, appID)
 	})
-}
-
-func launchBrowserURL(ctx context.Context, urlStr, appID string) error {
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return fmt.Errorf("parse app url: %w", err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("%w: %s", errInvalidURLScheme, u.Scheme)
-	}
-	profileDir, err := ProfileDir(appID)
-	if err != nil {
-		return err
-	}
-	view, err := openDesktopView(ctx, webview.Config{
-		Profile: profileDir,
-		Handler: urlHandler(u),
-	})
-	if err != nil {
-		return err
-	}
-	go func() {
-		select {
-		case <-ctx.Done():
-			if err := view.Close(); err != nil {
-				log.Printf("close web view: %v", err)
-			}
-		case <-view.Done():
-		}
-	}()
-	return nil
 }
