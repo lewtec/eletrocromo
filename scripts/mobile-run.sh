@@ -96,28 +96,39 @@ linux | windows)
 	go run ./cmd/eletrocromo build icons --config "$config" --output "$icons"
 	mkdir -p "$root/dist"
 	bin="$root/dist/${slug}-${platform}-${arch}"
+	cleanup=()
 	if [[ "$platform" == windows ]]; then
 		bin="${bin}.exe"
+		syso="$mod_dir/rsrc_windows_${arch}.syso"
+		go run ./scripts/winsyso -arch "$arch" -ico "$icons/windows/icon.ico" -o "$syso"
+		cleanup+=("$syso")
+	else
+		cp "$icons/linux/icon-256.png" "$mod_dir/eletrocromo_icon.png"
+		pkg="$(awk '/^package /{print $2; exit}' "$mod_dir"/*.go)"
+		cat >"$mod_dir/eletrocromo_icon.go" <<EOF
+package ${pkg}
+
+import _ "embed"
+
+//go:embed eletrocromo_icon.png
+var eletrocromoIconPNG []byte
+
+func init() {
+	if len(eletrocromoIconPNG) == 0 {
+		panic("eletrocromo icon")
+	}
+}
+EOF
+		cleanup+=("$mod_dir/eletrocromo_icon.png" "$mod_dir/eletrocromo_icon.go")
 	fi
+	trap 'rm -f "${cleanup[@]}"' EXIT
 	echo "building ${app_name} GOOS=${platform} GOARCH=${arch}"
 	(
 		cd "$mod_dir"
 		GOOS="$platform" GOARCH="$arch" CGO_ENABLED=0 go build -o "$bin" .
 	)
-	if [[ "$platform" == linux ]]; then
-		desktop="$root/dist/${slug}.desktop"
-		cat >"$desktop" <<EOF
-[Desktop Entry]
-Type=Application
-Name=${app_name}
-Exec=${bin}
-Icon=${icons}/linux/icon-256.png
-EOF
-		echo "desktop file ${desktop}"
-	else
-		cp "$icons/windows/icon.ico" "$root/dist/${slug}.ico"
-		echo "icon ${root}/dist/${slug}.ico (not inside the exe; a Windows resource is still separate)"
-	fi
+	rm -f "${cleanup[@]}"
+	trap - EXIT
 	if [[ "$(go env GOHOSTOS)" == "$platform" && "$(go env GOHOSTARCH)" == "$arch" ]]; then
 		echo "running ${bin}"
 		exec "$bin"

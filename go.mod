@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.10.0 // indirect
 	github.com/ebitengine/purego v0.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
