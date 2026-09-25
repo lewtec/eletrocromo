@@ -295,7 +295,6 @@ func buildArchive(dest, goMainDir, workDir, sdk string, stamp version.Info, stdo
 	)
 	cmd.Dir = goMainDir
 	cmd.Env = goenv.Merge(os.Environ(),
-		"CGO_ENABLED=1",
 		"GOOS=ios",
 		"GOARCH="+goarch,
 		"CC="+wrap,
