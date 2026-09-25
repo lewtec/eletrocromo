@@ -185,7 +185,7 @@ mise run linux:run examples/counter/eletrocromo.json
 mise run windows:run examples/counter/eletrocromo.json
 ```
 
-`build` and `run` take `eletrocromo.json`. The target is `--goos` and `--arch`, or this machine when those are omitted. Do not set `GOOS` on `go run`: that compiles the CLI itself for that OS, and `ios/arm64` will not link without cgo. `run` launches: `open` on darwin, Simulator on ios, adb on android, and the binary itself when linux or windows matches the host. No custom icon uses the atom mark. The Windows exe stores it in the PE resources. The Linux binary embeds the 256px PNG. 
+`build` and `run` take `eletrocromo.json`. The target is `GOOS`/`GOARCH`, or `--goos`/`--arch` when those are set, otherwise this machine. `run` launches: `open` on darwin, Simulator on ios, adb on android, and the binary itself when linux or windows matches the host. No custom icon uses the atom mark. The Windows exe stores it in the PE resources. The Linux binary embeds the 256px PNG. 
 
 The `.app` is unsigned Debug. First open: right-click → Open. Off-loopback
 http(s) links open in the default browser. Packaging lives in `internal/gen/mac/`.

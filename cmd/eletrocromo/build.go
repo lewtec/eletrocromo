@@ -21,8 +21,8 @@ var errConfigRequired = errors.New("config path required")
 // GOOS and GOARCH default to this machine. GOARCH can also be set with --arch.
 type buildCmd struct {
 	path cmd.StringArg `help:"path to eletrocromo.json"`
-	goos cmd.StringArg `long:"goos" default:"" help:"target GOOS (default: this machine). Do not put this in the environment of go run"`
-	arch cmd.StringArg `long:"arch" default:"" help:"GOARCH (default: this machine)"`
+	goos cmd.StringArg `long:"goos" default:"" help:"target GOOS (default: GOOS, else this machine)"`
+	arch cmd.StringArg `long:"arch" default:"" help:"target GOARCH (default: GOARCH, else this machine)"`
 	sdk  cmd.StringArg `long:"sdk" default:"" help:"iphonesimulator or iphoneos when GOOS=ios"`
 	hostFlags
 }
@@ -60,9 +60,15 @@ func (c *buildCmd) dispatch(ctx context.Context, launch bool) error {
 	}
 	goos := strings.TrimSpace(c.goos.Value())
 	if goos == "" {
+		goos = strings.TrimSpace(os.Getenv("GOOS"))
+	}
+	if goos == "" {
 		goos = runtime.GOOS
 	}
 	arch := strings.TrimSpace(c.arch.Value())
+	if arch == "" {
+		arch = strings.TrimSpace(os.Getenv("GOARCH"))
+	}
 	if arch == "" {
 		arch = runtime.GOARCH
 	}
