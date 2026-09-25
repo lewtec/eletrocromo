@@ -66,7 +66,7 @@ templ page(scheme string, d dirs.Dirs, events []event, names []string, probes []
 				<div class="card-body">
 					<h2 class="card-title">Opens</h2>
 					if len(events) == 0 {
-						<p class="opacity-70">None yet. From the Mac: <code>mise run ios:inbox:ping</code></p>
+						<p class="opacity-70">None yet. From the Mac: <code>bash examples/inbox/sim.sh ping</code></p>
 					} else {
 						<ul class="list">
 							for _, ev := range events {

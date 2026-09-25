@@ -29,52 +29,6 @@ ci = { depends = ["lint", "test", "check"] }
 # Local binary (same package as releases).
 "build:cli" = "go build -o bin/eletrocromo ./cmd/eletrocromo"
 
-# Build multiarch debug APK for the counter dogfood (needs ANDROID_HOME + JDK + Gradle).
-# Falls back to --go-only host tree when SDK is missing is not automatic; use apk:counter:go.
-"apk:counter" = """
-go run ./cmd/eletrocromo build android \
-  --config examples/counter/eletrocromo.json \
-  --out dist/counter-debug.apk \
-  --workdir dist/android-counter
-"""
-"apk:counter:go" = """
-go run ./cmd/eletrocromo build android \
-  --config examples/counter/eletrocromo.json \
-  --go-only \
-  --workdir dist/android-counter
-"""
-"macos:counter" = """
-go run ./cmd/eletrocromo build macos \
-  --config examples/counter/eletrocromo.json \
-  --out dist/Counter.app \
-  --workdir dist/macos-counter
-"""
-"macos:counter:go" = """
-go run ./cmd/eletrocromo build macos \
-  --config examples/counter/eletrocromo.json \
-  --go-only \
-  --workdir dist/macos-counter
-"""
-"ios:counter" = """
-go run ./cmd/eletrocromo build ios \
-  --config examples/counter/eletrocromo.json \
-  --out dist/Counter.app \
-  --workdir dist/ios-counter
-"""
-"ios:counter:go" = """
-go run ./cmd/eletrocromo build ios \
-  --config examples/counter/eletrocromo.json \
-  --go-only \
-  --workdir dist/ios-counter
-"""
-"ios:inbox" = """
-go run ./cmd/eletrocromo build ios \
-  --config examples/inbox/eletrocromo.json \
-  --out dist/Inbox.app \
-  --workdir dist/ios-inbox
-"""
-"ios:inbox:sim" = "bash examples/inbox/sim.sh sim"
-"ios:inbox:ping" = "bash examples/inbox/sim.sh ping"
 "icons" = "go run ./cmd/eletrocromo build icons --refresh-icons"
 
 # Dogfood host resolve + Helium --app (Ctrl+C to quit).
@@ -89,25 +43,50 @@ go run ./cmd/eletrocromo build ios \
 
 # Release extras: desktop archives come from GoReleaser; these tasks build
 # the packaging targets (APK / .app) and are invoked by Autorelease only.
-[tasks."apk:inbox"]
-description = "Inbox debug APK (mise java + android-sdk + gradle)"
-tools = { java = "temurin-17", android-sdk = "19.0", gradle = "8.9" }
+[tasks."linux:run"]
+description = "Cross-compile a Linux binary (GOOS=linux) and run it when this machine is Linux"
+usage = '''
+arg "<config>" help="Path to eletrocromo.json"
+'''
 run = '''
-yes | sdkmanager --licenses >/dev/null || true
-sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
-go run ./cmd/eletrocromo build android \
-  --config examples/inbox/eletrocromo.json \
-  --out dist/inbox-debug.apk \
-  --workdir dist/android-inbox
+go run ./cmd/eletrocromo run --goos linux "${usage_config}"
 '''
 
-[tasks."android:inbox"]
-description = "Install Inbox on the connected adb device and launch"
-tools = { java = "temurin-17", android-sdk = "19.0", gradle = "8.9" }
+[tasks."windows:run"]
+description = "Cross-compile a Windows exe (GOOS=windows). GOARCH defaults to this machine"
+usage = '''
+arg "<config>" help="Path to eletrocromo.json"
+'''
 run = '''
-mise run apk:inbox
-adb install -r dist/inbox-debug.apk
-adb shell am start -n br.tec.lew.eletrocromo.inbox/.MainActivity
+go run ./cmd/eletrocromo run --goos windows "${usage_config}"
+'''
+
+[tasks."mac:run"]
+description = "Build a macOS .app and open it"
+usage = '''
+arg "<config>" help="Path to eletrocromo.json"
+'''
+run = '''
+go run ./cmd/eletrocromo run --goos darwin "${usage_config}"
+'''
+
+[tasks."ios:run"]
+description = "Build an iOS Simulator .app, install it, and launch it"
+usage = '''
+arg "<config>" help="Path to eletrocromo.json"
+'''
+run = '''
+go run ./cmd/eletrocromo run --goos ios "${usage_config}"
+'''
+
+[tasks."android:run"]
+description = "Build a debug APK, install it on the connected device, and launch it"
+tools = { java = "temurin-17", android-sdk = "19.0", gradle = "8.9" }
+usage = '''
+arg "<config>" help="Path to eletrocromo.json"
+'''
+run = '''
+go run ./cmd/eletrocromo run --goos android "${usage_config}"
 '''
 
 [tasks."release:examples:android"]
@@ -116,8 +95,8 @@ tools = { gradle = "8.9" }
 run = '''
 mkdir -p dist/examples
 for name in basic counter ticker astro; do
-  go run ./cmd/eletrocromo build android \
-    --config "examples/${name}/eletrocromo.json" \
+  go run ./cmd/eletrocromo build --goos android \
+    "examples/${name}/eletrocromo.json" \
     --out "dist/examples/example-${name}-debug.apk" \
     --workdir "dist/android-${name}"
 done
@@ -132,16 +111,16 @@ if [ "$(uname -s)" != "Darwin" ]; then
 fi
 mkdir -p dist/examples
 for name in basic counter ticker astro; do
-  go run ./cmd/eletrocromo build macos \
-    --config "examples/${name}/eletrocromo.json" \
+  go run ./cmd/eletrocromo build --goos darwin \
+    "examples/${name}/eletrocromo.json" \
     --out "dist/examples/example-${name}.app" \
     --workdir "dist/macos-${name}"
   ditto -c -k --keepParent \
     "dist/examples/example-${name}.app" \
     "dist/examples/example-${name}_macOS.app.zip"
 
-  go run ./cmd/eletrocromo build ios \
-    --config "examples/${name}/eletrocromo.json" \
+  go run ./cmd/eletrocromo build --goos ios \
+    "examples/${name}/eletrocromo.json" \
     --out "dist/examples/example-${name}-ios.app" \
     --workdir "dist/ios-${name}"
   ditto -c -k --keepParent \

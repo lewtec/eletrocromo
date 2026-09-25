@@ -5,8 +5,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -19,19 +21,12 @@ func TestLoadConfig(t *testing.T) {
   "go_main": "."
 }
 `
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
 	cfg, base, err := LoadConfig(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if base != dir {
-		t.Fatalf("base=%q", base)
-	}
-	if cfg.PackageID != "br.tec.lew.demo" || cfg.AppName != "Demo" {
-		t.Fatalf("%+v", cfg)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, dir, base)
+	assert.Equal(t, "br.tec.lew.demo", cfg.PackageID)
+	assert.Equal(t, "Demo", cfg.AppName)
 }
 
 func TestLoadConfig_Capabilities(t *testing.T) {
@@ -48,16 +43,12 @@ func TestLoadConfig_Capabilities(t *testing.T) {
   }
 }
 `
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
 	cfg, _, err := LoadConfig(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Capabilities.URL == nil || cfg.Capabilities.URL.Schemes[0] != "myapp" {
-		t.Fatalf("%+v", cfg.Capabilities)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Capabilities.URL)
+	require.NotEmpty(t, cfg.Capabilities.URL.Schemes)
+	assert.Equal(t, "myapp", cfg.Capabilities.URL.Schemes[0])
 }
 
 func TestLoadConfig_UnknownCapability(t *testing.T) {
@@ -70,29 +61,23 @@ func TestLoadConfig_UnknownCapability(t *testing.T) {
   "capabilities": {"camera": {"usage": "x"}}
 }
 `
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
 	_, _, err := LoadConfig(dir)
-	if err == nil {
-		t.Fatal("want error")
-	}
+	require.Error(t, err)
 }
 
 func TestMerge_FlagsWin(t *testing.T) {
 	base := Config{PackageID: "a.b.c", AppName: "A", GoMain: "."}
 	out := Merge(base, Config{AppName: "B", GoMain: "./cmd"})
-	if out.PackageID != "a.b.c" || out.AppName != "B" || out.GoMain != "./cmd" {
-		t.Fatalf("%+v", out)
-	}
+	assert.Equal(t, "a.b.c", out.PackageID)
+	assert.Equal(t, "B", out.AppName)
+	assert.Equal(t, "./cmd", out.GoMain)
 }
 
 func TestBuild_GoOnly_Counter(t *testing.T) {
 	// examples/counter is a sibling module with replace → ../..
 	repoRoot, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	counterDir := filepath.Join(repoRoot, "examples", "counter")
 	if _, err := os.Stat(filepath.Join(counterDir, "main.go")); err != nil {
 		t.Skip("examples/counter not present")
@@ -115,26 +100,17 @@ func TestBuild_GoOnly_Counter(t *testing.T) {
 		Stdout:      &buf,
 		Stderr:      &buf,
 	})
-	if err != nil {
-		t.Fatalf("%v\n%s", err, buf.String())
-	}
-	if len(res.JNILibs) != 1 {
-		t.Fatalf("libs=%v", res.JNILibs)
-	}
+	require.NoError(t, err, buf.String())
+	require.Len(t, res.JNILibs, 1)
 	st, err := os.Stat(res.JNILibs[0])
-	if err != nil || st.Size() < 1000 {
-		t.Fatalf("lib missing or tiny: %v size=%d", err, st.Size())
-	}
-	if !strings.Contains(buf.String(), "arm64-v8a") {
-		t.Fatalf("log: %s", buf.String())
-	}
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, st.Size(), int64(1000))
+	assert.Contains(t, buf.String(), "arm64-v8a")
 }
 
 func TestDefaultOutAPK(t *testing.T) {
 	p := DefaultOutAPK("br.tec.lew.counter", "/tmp/proj")
-	if p != filepath.Join("/tmp/proj", "dist", "counter-debug.apk") {
-		t.Fatal(p)
-	}
+	assert.Equal(t, filepath.Join("/tmp/proj", "dist", "counter-debug.apk"), p)
 }
 
 func TestAndroidSDK_MissingMessage(t *testing.T) {
@@ -145,9 +121,7 @@ func TestAndroidSDK_MissingMessage(t *testing.T) {
 	if err == nil {
 		t.Skip("SDK present on machine")
 	}
-	if !errors.Is(err, ErrAndroidSDKNotFound) && !errors.Is(err, ErrSDKEnvNotDir) {
-		t.Fatalf("want SDK sentinel, got %v", err)
-	}
+	assert.True(t, errors.Is(err, ErrAndroidSDKNotFound) || errors.Is(err, ErrSDKEnvNotDir))
 }
 
 func TestCopyFile(t *testing.T) {
@@ -155,20 +129,10 @@ func TestCopyFile(t *testing.T) {
 	src := filepath.Join(dir, "src.bin")
 	dst := filepath.Join(dir, "dst.bin")
 	want := []byte("apk-bytes")
-	if err := os.WriteFile(src, want, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := copyFile(src, dst); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(src, want, 0o644))
+	require.NoError(t, copyFile(src, dst))
 	got, err := os.ReadFile(dst)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != string(want) {
-		t.Fatalf("got %q want %q", got, want)
-	}
-	if err := copyFile(filepath.Join(dir, "missing"), dst); err == nil {
-		t.Fatal("expected error for missing src")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+	require.Error(t, copyFile(filepath.Join(dir, "missing"), dst))
 }

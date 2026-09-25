@@ -22,11 +22,10 @@ const ConfigFileName = "eletrocromo.json"
 
 // DefaultABIs for the packaged APK.
 //
-// With CGO_ENABLED=0 only android/arm64 links today (no NDK). Prefer arm64-v8a
-// for pure-Go apps; add other ABIs when you have an NDK toolchain and cgo.
+// Prefer arm64-v8a. Add other ABIs when the NDK and cgo are available.
 var DefaultABIs = []string{"arm64-v8a"}
 
-// abiToGOARCH maps Android ABI → Go GOARCH (CGO_ENABLED=0 GOOS=android).
+// abiToGOARCH maps Android ABI → Go GOARCH.
 var abiToGOARCH = map[string]string{
 	"arm64-v8a":   "arm64",
 	"armeabi-v7a": "arm",

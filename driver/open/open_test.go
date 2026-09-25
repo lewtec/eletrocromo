@@ -6,6 +6,9 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestToken(t *testing.T) {
@@ -32,20 +35,17 @@ func TestToken(t *testing.T) {
 		t.Run(strconv.Quote(tt.in), func(t *testing.T) {
 			t.Parallel()
 			got, ok := Token(tt.in)
-			if ok != tt.ok {
-				t.Fatalf("ok=%v want %v (%#v)", ok, tt.ok, got)
-			}
+			require.Equal(t, tt.ok, ok)
 			if !ok {
 				return
 			}
-			if got.Kind != tt.kind {
-				t.Fatalf("kind=%v want %v", got.Kind, tt.kind)
+			assert.Equal(t, tt.kind, got.Kind)
+			if tt.kind == KindURL {
+				assert.Equal(t, tt.url, got.URL)
 			}
-			if tt.kind == KindURL && got.URL != tt.url {
-				t.Fatalf("url=%q want %q", got.URL, tt.url)
-			}
-			if tt.kind == KindFiles && (len(got.Paths) != 1 || got.Paths[0] != tt.path) {
-				t.Fatalf("paths=%v want %q", got.Paths, tt.path)
+			if tt.kind == KindFiles {
+				require.Len(t, got.Paths, 1)
+				assert.Equal(t, tt.path, got.Paths[0])
 			}
 		})
 	}
@@ -53,26 +53,24 @@ func TestToken(t *testing.T) {
 
 func TestCollect_EnvAndArgv(t *testing.T) {
 	got := Collect([]string{"-test.v", "myapp://item/1", "-flag"}, " /tmp/a.pdf ")
-	if len(got) != 2 {
-		t.Fatalf("len=%d %#v", len(got), got)
-	}
-	if got[0].Kind != KindURL || got[0].URL != "myapp://item/1" {
-		t.Fatalf("url: %#v", got[0])
-	}
-	if got[1].Kind != KindFiles || got[1].Paths[0] != "/tmp/a.pdf" {
-		t.Fatalf("file: %#v", got[1])
-	}
+	require.Len(t, got, 2)
+	assert.Equal(t, KindURL, got[0].Kind)
+	assert.Equal(t, "myapp://item/1", got[0].URL)
+	assert.Equal(t, KindFiles, got[1].Kind)
+	require.Len(t, got[1].Paths, 1)
+	assert.Equal(t, "/tmp/a.pdf", got[1].Paths[0])
 }
 
 func TestParseLine(t *testing.T) {
 	ev, err := ParseLine([]byte(`{"kind":"url","url":"myapp://x"}`))
-	if err != nil || ev.Kind != KindURL || ev.URL != "myapp://x" {
-		t.Fatalf("%#v %v", ev, err)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, KindURL, ev.Kind)
+	assert.Equal(t, "myapp://x", ev.URL)
 	ev, err = ParseLine([]byte(`{"kind":"files","paths":["/a"]}`))
-	if err != nil || ev.Kind != KindFiles || ev.Paths[0] != "/a" {
-		t.Fatalf("%#v %v", ev, err)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, KindFiles, ev.Kind)
+	require.Len(t, ev.Paths, 1)
+	assert.Equal(t, "/a", ev.Paths[0])
 }
 
 func TestTailFile_ReadsAppend(t *testing.T) {
@@ -89,38 +87,29 @@ func TestTailFile_ReadsAppend(t *testing.T) {
 		})
 	}()
 
-	if err := os.WriteFile(path, []byte("{\"kind\":\"url\",\"url\":\"myapp://one\"}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte("{\"kind\":\"url\",\"url\":\"myapp://one\"}\n"), 0o600))
 	select {
 	case ev := <-got:
-		if ev.URL != "myapp://one" {
-			t.Fatalf("%#v", ev)
-		}
+		assert.Equal(t, "myapp://one", ev.URL)
 	case err := <-errCh:
-		t.Fatal(err)
+		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
-		t.Fatal("timeout first line")
+		require.Fail(t, "timeout first line")
 	}
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString("{\"kind\":\"files\",\"paths\":[\"/b\"]}\n"); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	_, err = f.WriteString("{\"kind\":\"files\",\"paths\":[\"/b\"]}\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
 	select {
 	case ev := <-got:
-		if ev.Kind != KindFiles || ev.Paths[0] != "/b" {
-			t.Fatalf("%#v", ev)
-		}
+		assert.Equal(t, KindFiles, ev.Kind)
+		require.Len(t, ev.Paths, 1)
+		assert.Equal(t, "/b", ev.Paths[0])
 	case err := <-errCh:
-		t.Fatal(err)
+		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
-		t.Fatal("timeout second line")
+		require.Fail(t, "timeout second line")
 	}
 }

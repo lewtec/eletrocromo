@@ -4,43 +4,31 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAppendAndParse(t *testing.T) {
 	dir := t.TempDir()
 	path := FilePath(dir)
 	item := Item{Text: "hello", URL: "https://example.com"}
-	if err := AppendFile(path, item); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, AppendFile(path, item))
 	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	got, err := ParseLine(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Text != "hello" || got.URL != "https://example.com" {
-		t.Fatalf("%#v", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "hello", got.Text)
+	assert.Equal(t, "https://example.com", got.URL)
 }
 
 func TestValidate_Empty(t *testing.T) {
-	if err := (Item{}).validate(); err == nil {
-		t.Fatal("want error")
-	}
+	require.Error(t, (Item{}).validate())
 }
 
 func TestValidate_AbsPath(t *testing.T) {
-	if err := (Item{Paths: []string{"rel.txt"}}).validate(); err == nil {
-		t.Fatal("want error")
-	}
+	require.Error(t, (Item{Paths: []string{"rel.txt"}}).validate())
 	p := filepath.Join(t.TempDir(), "a.txt")
-	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := (Item{Paths: []string{p}}).validate(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(p, []byte("x"), 0o600))
+	require.NoError(t, (Item{Paths: []string{p}}).validate())
 }

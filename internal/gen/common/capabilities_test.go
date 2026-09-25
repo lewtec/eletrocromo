@@ -1,16 +1,15 @@
 package common
 
 import (
-	"errors"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseCapabilities_UnknownKey(t *testing.T) {
 	_, err := ParseCapabilities([]byte(`{"camera":{"usage":"x"}}`))
-	if !errors.Is(err, ErrCapabilityUnknown) {
-		t.Fatalf("err = %v; want ErrCapabilityUnknown", err)
-	}
+	require.ErrorIs(t, err, ErrCapabilityUnknown)
 }
 
 func TestParseCapabilities_URLAndFiles(t *testing.T) {
@@ -18,22 +17,19 @@ func TestParseCapabilities_URLAndFiles(t *testing.T) {
 		"url":{"schemes":["MyApp"]},
 		"files":{"types":[{"ext":"md","mime":"text/markdown"}]}
 	}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(c.URL.Schemes) != 1 || c.URL.Schemes[0] != "myapp" {
-		t.Fatalf("schemes = %#v", c.URL.Schemes)
-	}
-	if c.Files.Types[0].Ext != ".md" || c.Files.Types[0].MIME != "text/markdown" {
-		t.Fatalf("types = %#v", c.Files.Types)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, c.URL)
+	require.Len(t, c.URL.Schemes, 1)
+	assert.Equal(t, "myapp", c.URL.Schemes[0])
+	require.NotNil(t, c.Files)
+	require.NotEmpty(t, c.Files.Types)
+	assert.Equal(t, ".md", c.Files.Types[0].Ext)
+	assert.Equal(t, "text/markdown", c.Files.Types[0].MIME)
 }
 
 func TestValidate_ReservedScheme(t *testing.T) {
 	c := Capabilities{URL: &URLCap{Schemes: []string{"https"}}}
-	if err := c.Validate(); !errors.Is(err, ErrSchemeInvalid) {
-		t.Fatalf("err = %v", err)
-	}
+	require.ErrorIs(t, c.Validate(), ErrSchemeInvalid)
 }
 
 func TestAndroidIntentFilters(t *testing.T) {
@@ -42,17 +38,12 @@ func TestAndroidIntentFilters(t *testing.T) {
 		Files: &FilesCap{Types: []FileType{{Ext: ".pdf", MIME: "application/pdf"}}},
 	}
 	s := c.AndroidIntentFilters()
-	if !strings.Contains(s, `android:scheme="myapp"`) {
-		t.Fatalf("scheme:\n%s", s)
-	}
-	if !strings.Contains(s, `android:mimeType="application/pdf"`) {
-		t.Fatalf("mime:\n%s", s)
-	}
+	assert.Contains(t, s, `android:scheme="myapp"`)
+	assert.Contains(t, s, `android:mimeType="application/pdf"`)
 	img := Capabilities{Files: &FilesCap{Types: []FileType{{Ext: ".jpg", MIME: "image/jpeg"}}}}
 	is := img.AndroidIntentFilters()
-	if !strings.Contains(is, `android:mimeType="image/*"`) || !strings.Contains(is, "SEND_MULTIPLE") {
-		t.Fatalf("image share:\n%s", is)
-	}
+	assert.Contains(t, is, `android:mimeType="image/*"`)
+	assert.Contains(t, is, "SEND_MULTIPLE")
 }
 
 func TestPlistFragments(t *testing.T) {
@@ -61,17 +52,12 @@ func TestPlistFragments(t *testing.T) {
 		Files: &FilesCap{Types: []FileType{{Ext: ".md", MIME: "text/markdown"}}},
 	}
 	u := c.PlistURLTypes("br.tec.lew.demo")
-	if !strings.Contains(u, "CFBundleURLTypes") || !strings.Contains(u, "myapp") {
-		t.Fatalf("url types:\n%s", u)
-	}
+	assert.Contains(t, u, "CFBundleURLTypes")
+	assert.Contains(t, u, "myapp")
 	d := c.PlistDocumentTypes()
-	if !strings.Contains(d, "CFBundleDocumentTypes") || !strings.Contains(d, "md") {
-		t.Fatalf("docs:\n%s", d)
-	}
-	if !strings.Contains(d, "LSSupportsOpeningDocumentsInPlace") {
-		t.Fatalf("in-place:\n%s", d)
-	}
-	if !strings.Contains(d, "UTImportedTypeDeclarations") || !strings.Contains(d, "LSHandlerRank") {
-		t.Fatalf("imported/rank:\n%s", d)
-	}
+	assert.Contains(t, d, "CFBundleDocumentTypes")
+	assert.Contains(t, d, "md")
+	assert.Contains(t, d, "LSSupportsOpeningDocumentsInPlace")
+	assert.Contains(t, d, "UTImportedTypeDeclarations")
+	assert.Contains(t, d, "LSHandlerRank")
 }

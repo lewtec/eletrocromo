@@ -71,15 +71,15 @@ Needs a local orvalho checkout (see `examples/astro/go.mod` `replace`). Details:
 
 ## CLI (`cmd/eletrocromo`)
 
-Cobra tooling binary (separate from the importable library):
+Packaging binary (separate from the importable library):
 
 ```bash
 go run ./cmd/eletrocromo --help
 go run ./cmd/eletrocromo version
 go run ./cmd/eletrocromo build icons          # → dist/icons (default mark or config icon)
-go run ./cmd/eletrocromo build android       # JIT APK; generates icons if missing
-go run ./cmd/eletrocromo build macos         # JIT unsigned Debug .app (Mac + Xcode)
-go run ./cmd/eletrocromo build ios           # JIT Debug .app (Mac + Xcode iOS SDK)
+go run ./cmd/eletrocromo build examples/counter/eletrocromo.json
+go run ./cmd/eletrocromo build --goos android examples/counter/eletrocromo.json
+go run ./cmd/eletrocromo run --goos ios examples/counter/eletrocromo.json
 # or: mise run build:cli && ./bin/eletrocromo version
 ```
 
@@ -104,7 +104,7 @@ Wire paths into GoReleaser yourself (`before.hooks`, Pro `app_bundles.icon`, nFP
 
 ### Release
 
-Self-contained binaries (`CGO_ENABLED=0`) via [GoReleaser](https://goreleaser.com/).
+Binaries via [GoReleaser](https://goreleaser.com/).
 GitHub Releases only from **Actions → Autorelease → Run workflow** (`workflow_dispatch`).
 Push/`schedule` on `main` run CI only.
 
@@ -113,7 +113,7 @@ Push/`schedule` on `main` run CI only.
 mise run release -- patch   # or next | minor | major
 ```
 
-Artifacts under GitHub Releases, stamped with `internal/version` ldflags:
+Artifacts under GitHub Releases, stamped with `lewkit/x/release`:
 
 - CLI: `eletrocromo_{Linux,Darwin,Windows}_{x86_64,arm64}`
 - Example desktop binaries: `example-{basic,counter,ticker,astro}_{Linux,Darwin,Windows}_{x86_64,arm64}`
@@ -121,16 +121,13 @@ Artifacts under GitHub Releases, stamped with `internal/version` ldflags:
 - Example macOS unsigned Debug `.app` zips: `example-*_macOS.app.zip`
 - Example iOS Simulator Debug `.app` zips: `example-*_iOS-simulator.app.zip`
 
-Version uses the usual Go release stamps (`internal/version`):
+`eletrocromo version` and `--version` print `lewkit/x/release`. Goreleaser sets:
 
 ```text
--X github.com/lewtec/eletrocromo/internal/version.Version={{.Version}}
--X github.com/lewtec/eletrocromo/internal/version.Commit={{.Commit}}
--X github.com/lewtec/eletrocromo/internal/version.Date={{.Date}}
--X github.com/lewtec/eletrocromo/internal/version.BuiltBy=goreleaser
+-X github.com/lewtec/lewkit/x/release.version={{.Version}}
 ```
 
-When unset, `version` / Android `versionName` fall back to module build info and
+The revision suffix comes from the build's `vcs.revision`. Android `versionName` still falls back to module build info and
 `git describe` in the app tree; `versionCode` from semver (`MMmmpp`) or
 `git rev-list --count`.
 
@@ -143,27 +140,25 @@ cross-compiles multiarch Go (`GOOS=android`), and runs Gradle:
 ```bash
 # from the app module:
 cd examples/counter
-go run ../../cmd/eletrocromo build android
-# → dist/icons + dist/counter-debug.apk (package id from eletrocromo.json)
+go run ../../cmd/eletrocromo build --goos android eletrocromo.json
 
 # from repo root:
-go run ./cmd/eletrocromo build android \
-  --config examples/counter/eletrocromo.json \
+go run ./cmd/eletrocromo build --goos android examples/counter/eletrocromo.json \
   --out dist/counter-debug.apk
 
-mise run apk:counter
+mise run android:run examples/counter/eletrocromo.json
 ```
 
-Default ABI is **arm64-v8a** only (pure Go / `CGO_ENABLED=0`; other ABIs need
+Default ABI is **arm64-v8a** (other ABIs need
 an NDK). Full APK also needs **JDK 17+**, **Android SDK** (`ANDROID_HOME`), and
 **Gradle 8.9+** on `PATH`. Without the SDK:
 
 ```bash
-go run ./cmd/eletrocromo build android --config examples/counter/eletrocromo.json --go-only --workdir dist/android-counter
+go run ./cmd/eletrocromo build --goos android examples/counter/eletrocromo.json --go-only --workdir dist/android-counter
 ```
 
 Icons are generated when missing (`--refresh-icons` to force). Legacy
-`android build` / `android create` still work; prefer `build android`. Runtime:
+`android build` / `android create` still work; prefer `eletrocromo build --goos android`. Runtime:
 the service sets `ELETROCROMO_NO_UI=1` and loads the `ELETROCROMO_READY` URL in
 WebView. Packaging lives in `internal/gen/apk/` + `internal/icons/` +
 `cmd/eletrocromo` (not in the core library import path for apps).
@@ -174,8 +169,7 @@ Same config and handshake as the APK. The host is its own WKWebView shell and ru
 Full `.app` needs **Xcode** and **xcodegen** on a Mac. Without them:
 
 ```bash
-go run ./cmd/eletrocromo build macos \
-  --config examples/counter/eletrocromo.json \
+go run ./cmd/eletrocromo build --goos darwin examples/counter/eletrocromo.json \
   --go-only \
   --workdir dist/macos-counter
 ```
@@ -183,12 +177,15 @@ go run ./cmd/eletrocromo build macos \
 On a Mac with Xcode:
 
 ```bash
-go run ./cmd/eletrocromo build macos \
-  --config examples/counter/eletrocromo.json \
+go run ./cmd/eletrocromo build --goos darwin examples/counter/eletrocromo.json \
   --out dist/Counter.app
 
-mise run macos:counter
+mise run mac:run examples/counter/eletrocromo.json
+mise run linux:run examples/counter/eletrocromo.json
+mise run windows:run examples/counter/eletrocromo.json
 ```
+
+`build` and `run` take `eletrocromo.json`. The target is `GOOS`/`GOARCH`, or `--goos`/`--arch` when those are set, otherwise this machine. `run` launches: `open` on darwin, Simulator on ios, adb on android, and the binary itself when linux or windows matches the host. No custom icon uses the atom mark. The Windows exe stores it in the PE resources. The Linux binary embeds the 256px PNG. 
 
 The `.app` is unsigned Debug. First open: right-click → Open. Off-loopback
 http(s) links open in the default browser. Packaging lives in `internal/gen/mac/`.
@@ -201,8 +198,7 @@ UIKit WKWebView host. Full `.app` needs **Xcode** (iOS SDK) and **xcodegen**
 on a Mac. Launch needs an **iOS Simulator runtime** (or a signed device).
 
 ```bash
-go run ./cmd/eletrocromo build ios \
-  --config examples/counter/eletrocromo.json \
+go run ./cmd/eletrocromo build --goos ios examples/counter/eletrocromo.json \
   --go-only \
   --workdir dist/ios-counter
 ```
@@ -210,11 +206,10 @@ go run ./cmd/eletrocromo build ios \
 On a Mac with Xcode:
 
 ```bash
-go run ./cmd/eletrocromo build ios \
-  --config examples/counter/eletrocromo.json \
-  --out dist/Counter.app
+go run ./cmd/eletrocromo build --goos ios examples/counter/eletrocromo.json \
+  --out dist/Counter-ios.app
 
-mise run ios:counter
+mise run ios:run examples/counter/eletrocromo.json
 ```
 
 Default SDK is `iphonesimulator`. Use `--sdk iphoneos` for a device archive.

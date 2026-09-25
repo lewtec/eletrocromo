@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRun_NoUI_PrintsReadyAndServes(t *testing.T) {
@@ -21,8 +24,8 @@ func TestRun_NoUI_PrintsReadyAndServes(t *testing.T) {
 	defer log.SetOutput(prev)
 
 	app := &App{
-		ID:    "br.tec.lew.eletrocromo.noui_test",
-		NoUI:  true,
+		ID:      "br.tec.lew.eletrocromo.noui_test",
+		NoUI:    true,
 		Context: ctx,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if _, err := w.Write([]byte("pong")); err != nil {
@@ -34,59 +37,38 @@ func TestRun_NoUI_PrintsReadyAndServes(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() { errCh <- app.Run() }()
 
-	// Wait for READY line.
 	var link string
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if i := strings.Index(buf.String(), ReadyLinePrefix); i >= 0 {
-			rest := buf.String()[i+len(ReadyLinePrefix):]
-			if j := strings.IndexByte(rest, '\n'); j >= 0 {
-				link = strings.TrimSpace(rest[:j])
-			} else {
-				link = strings.TrimSpace(rest)
-			}
-			if link != "" {
-				break
-			}
+	require.Eventually(t, func() bool {
+		i := strings.Index(buf.String(), ReadyLinePrefix)
+		if i < 0 {
+			return false
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if link == "" {
-		cancel()
-		t.Fatalf("no READY line in logs:\n%s", buf.String())
-	}
-	if !strings.HasPrefix(link, "http://127.0.0.1:") && !strings.HasPrefix(link, "http://localhost:") {
-		t.Fatalf("unexpected READY url %q", link)
-	}
-	if !strings.Contains(link, "token=") {
-		t.Fatalf("READY url missing token: %q", link)
-	}
+		rest := buf.String()[i+len(ReadyLinePrefix):]
+		if j := strings.IndexByte(rest, '\n'); j >= 0 {
+			link = strings.TrimSpace(rest[:j])
+		} else {
+			link = strings.TrimSpace(rest)
+		}
+		return link != ""
+	}, 3*time.Second, 20*time.Millisecond, "no READY line in logs:\n%s", buf.String())
+	assert.True(t, strings.HasPrefix(link, "http://127.0.0.1:") || strings.HasPrefix(link, "http://localhost:"), link)
+	assert.Contains(t, link, "token=")
 
 	resp, err := http.Get(link)
-	if err != nil {
-		cancel()
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	body, err := io.ReadAll(resp.Body)
 	if cerr := resp.Body.Close(); err == nil {
 		err = cerr
 	}
-	if err != nil {
-		cancel()
-		t.Fatal(err)
-	}
-	if resp.StatusCode != http.StatusOK || string(body) != "pong" {
-		cancel()
-		t.Fatalf("status=%d body=%q", resp.StatusCode, body)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "pong", string(body))
 
 	cancel()
 	select {
 	case err := <-errCh:
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	case <-time.After(3 * time.Second):
-		t.Fatal("Run did not exit after cancel")
+		require.Fail(t, "Run did not exit after cancel")
 	}
 }

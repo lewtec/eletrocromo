@@ -1,15 +1,16 @@
-// Package version holds build identity for the eletrocromo CLI and packaging.
+// Package version resolves packaging identity (Android versionName / versionCode)
+// for an app tree. The CLI's own version is github.com/lewtec/lewkit/x/release.
 //
-// Goreleaser / go build inject via -ldflags -X (same pattern as most Go CLIs):
+// Resolve prefers these -X vars when set, then build info, then git describe
+// in the app directory:
 //
-//	-X github.com/lewtec/eletrocromo/internal/version.Version={{.Version}}
-//	-X github.com/lewtec/eletrocromo/internal/version.Commit={{.Commit}}
-//	-X github.com/lewtec/eletrocromo/internal/version.Date={{.Date}}
+//	-X github.com/lewtec/eletrocromo/internal/version.Version=v1.2.3
+//	-X github.com/lewtec/eletrocromo/internal/version.Commit=<sha>
+//	-X github.com/lewtec/eletrocromo/internal/version.Date=<rfc3339>
 //	-X github.com/lewtec/eletrocromo/internal/version.BuiltBy=goreleaser
 //
-// When those are left at defaults, Resolve fills what it can from
-// runtime/debug.BuildInfo (module version + vcs.* when built with VCS stamping)
-// and, for a given module directory, from git describe / rev-list.
+// GoBuildLdflags stamps that resolved version onto
+// github.com/lewtec/lewkit/x/release.version in the packaged app binary.
 package version
 
 import (
@@ -251,31 +252,15 @@ func GitCommitCount(dir string) int {
 	return n
 }
 
-const ldflagsPackage = "github.com/lewtec/eletrocromo/internal/version"
+const releaseVersionSymbol = "github.com/lewtec/lewkit/x/release.version"
 
-// GoBuildLdflags is a single -ldflags value: strip + goreleaser-style -X stamps.
+// GoBuildLdflags is a single -ldflags value: strip plus the lewkit release stamp.
 func (i Info) GoBuildLdflags() string {
-	var b strings.Builder
-	b.WriteString("-s -w")
-	writeX := func(name, val string) {
-		if val == "" && name != "Version" {
-			return
-		}
-		if val == "" {
-			val = "devel"
-		}
-		b.WriteString(" -X ")
-		b.WriteString(ldflagsPackage)
-		b.WriteByte('.')
-		b.WriteString(name)
-		b.WriteByte('=')
-		b.WriteString(sanitizeLdflag(val))
+	val := strings.TrimSpace(i.Version)
+	if val == "" || val == "devel" {
+		val = "dev"
 	}
-	writeX("Version", i.Version)
-	writeX("Commit", i.Commit)
-	writeX("Date", i.Date)
-	writeX("BuiltBy", i.BuiltBy)
-	return b.String()
+	return "-s -w -X " + releaseVersionSymbol + "=" + sanitizeLdflag(val)
 }
 
 func sanitizeLdflag(s string) string {

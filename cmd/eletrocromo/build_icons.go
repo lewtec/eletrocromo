@@ -4,68 +4,50 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/gen/apk"
 	"github.com/lewtec/eletrocromo/internal/icons"
-	"github.com/lucasew/workspaced/pkg/logging"
-	"github.com/lucasew/workspaced/pkg/taskgroup"
-	"github.com/spf13/cobra"
+	"github.com/lewtec/lewkit/x/cmd"
+	"github.com/lewtec/lewkit/x/taskgroup"
 )
 
-func newBuildIconsCmd() *cobra.Command {
-	var (
-		configPath string
-		iconPath   string
-		output     string
-		refresh    bool
-	)
-	cmd := &cobra.Command{
-		Use:   "icons",
-		Short: "Generate multi-platform icons from one master PNG/JPEG",
-		Long: `Rasterize a master image (or the embedded default mark) into dist/icons:
+type iconsCmd struct {
+	config  cmd.StringArg `long:"config" default:"" help:"path to eletrocromo.json (default: ./eletrocromo.json if present)"`
+	icon    cmd.StringArg `long:"icon" default:"" help:"master PNG/JPEG (overrides config icon; default: embedded mark)"`
+	output  cmd.StringArg `long:"output" default:"dist/icons" help:"icon tree root"`
+	refresh cmd.Flag      `long:"refresh-icons" help:"regenerate even if outputs exist"`
+}
 
-  source/  windows/  macos/  linux/  android/  web/  manifest.json
+func (iconsCmd) Description() string {
+	return "Generate multi-platform icons from one master PNG/JPEG into dist/icons (source, windows, macos, linux, android, web, manifest.json). Skip when the tree is already complete unless --refresh-icons. SVG is not rasterized in-process yet."
+}
 
-Config: optional "icon" in eletrocromo.json. Flags override.
-Skip when the tree is already complete unless --refresh-icons.
-
-SVG is not rasterized in-process yet — convert to PNG/JPEG first
-(or wait for a workspaced catalog tool pin).`,
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			src, out, err := resolveIconIO(cwd, configPath, iconPath, output)
-			if err != nil {
-				return err
-			}
-			man, err := icons.Generate(icons.Options{
-				SourcePath: src,
-				OutputDir:  out,
-				Force:      refresh,
-			})
-			if err != nil {
-				return err
-			}
-			if !refresh && icons.Complete(out) && man != nil {
-				_, err = fmt.Fprintf(cmd.OutOrStdout(), "icons up to date: %s\n", man.OutputDir)
-			} else {
-				_, err = fmt.Fprintf(cmd.OutOrStdout(), "ok %s (%d files)\n", man.OutputDir, len(man.Files))
-			}
-			return err
-		},
+func (c *iconsCmd) Run(context.Context) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
 	}
-	cmd.Flags().StringVar(&configPath, "config", "", "path to eletrocromo.json (default: ./eletrocromo.json if present)")
-	cmd.Flags().StringVar(&iconPath, "icon", "", "master PNG/JPEG (overrides config icon; default: embedded mark)")
-	cmd.Flags().StringVar(&output, "output", icons.DefaultOutputDir, "icon tree root")
-	cmd.Flags().BoolVar(&refresh, "refresh-icons", false, "regenerate even if outputs exist")
-	return cmd
+	src, out, err := resolveIconIO(cwd, c.config.Value(), c.icon.Value(), c.output.Value())
+	if err != nil {
+		return err
+	}
+	man, err := icons.Generate(icons.Options{
+		SourcePath: src,
+		OutputDir:  out,
+		Force:      c.refresh.Value(),
+	})
+	if err != nil {
+		return err
+	}
+	if !c.refresh.Value() && icons.Complete(out) && man != nil {
+		_, err = fmt.Fprintf(os.Stdout, "icons up to date: %s\n", man.OutputDir)
+	} else {
+		_, err = fmt.Fprintf(os.Stdout, "ok %s (%d files)\n", man.OutputDir, len(man.Files))
+	}
+	return err
 }
 
 // defaultConfigPath returns cwd/eletrocromo.json when it is a regular file.
@@ -158,19 +140,17 @@ type iconThen struct {
 
 // runIconsThen generates the icon tree, then runs work with that root.
 // Same schedule as build android / ios / macos.
-func runIconsThen(cmd *cobra.Command, ic iconThen, work func(iconRoot string) error) error {
-	ctx := logging.NewWriterContext(cmd.ErrOrStderr())
-	ctx = logging.ContextWithLogger(ctx, slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), &slog.HandlerOptions{Level: slog.LevelWarn})))
-	// taskgroup.New also returns a child context; workers receive it via g.Go.
-	g, _ := taskgroup.New(ctx, taskgroup.DefaultLimits())
-	var iconRoot string
-	g.Go("icons", taskgroup.CPU, func(ctx context.Context, s *taskgroup.Status) error {
-		var err error
-		iconRoot, err = ensureBuildIcons(cmd.OutOrStdout(), ic.src, ic.out, ic.refresh)
-		return err
+func runIconsThen(ctx context.Context, ic iconThen, work func(iconRoot string) error) error {
+	return taskgroup.WithSession(ctx, func(ctx context.Context) error {
+		var iconRoot string
+		iconsID := taskgroup.Go(ctx, "icons", taskgroup.CPU, func(context.Context, *taskgroup.Status) error {
+			var err error
+			iconRoot, err = ensureBuildIcons(os.Stdout, ic.src, ic.out, ic.refresh)
+			return err
+		})
+		taskgroup.Go(ctx, ic.name, taskgroup.IO, func(context.Context, *taskgroup.Status) error {
+			return work(iconRoot)
+		}, iconsID)
+		return nil
 	})
-	g.Go(ic.name, taskgroup.IO, func(ctx context.Context, s *taskgroup.Status) error {
-		return work(iconRoot)
-	}, "icons")
-	return g.Wait()
 }

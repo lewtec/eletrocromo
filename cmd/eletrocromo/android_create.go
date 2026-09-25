@@ -1,84 +1,51 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/lewtec/eletrocromo/internal/gen/apk"
-	"github.com/spf13/cobra"
+	"github.com/lewtec/lewkit/x/cmd"
 )
 
-func newAndroidCreateCmd() *cobra.Command {
-	var (
-		id      string
-		name    string
-		out     string
-		goMain  string
-		version string
-		code    int
-		force   bool
-	)
+type androidCreateCmd struct {
+	id      cmd.StringArg   `long:"id" help:"reverse-domain package id / applicationId (required)"`
+	name    cmd.StringArg   `long:"name" default:"" help:"launcher label (default: last label of --id)"`
+	out     cmd.StringArg   `long:"out" help:"output project directory (required)"`
+	goMain  cmd.StringArg   `long:"go-main" default:"." help:"Go main package directory (stored in eletrocromo.json)"`
+	version cmd.StringArg   `long:"version" default:"" help:"Android versionName (default: from VCS / -X)"`
+	code    cmd.IntArg[int] `long:"code" default:"0" help:"Android versionCode (default: from version / git)"`
+	force   cmd.Flag        `long:"force" help:"overwrite non-empty --out"`
+}
 
-	cmd := &cobra.Command{
-		Use:     "create",
-		Aliases: []string{"init"},
-		Short:   "Generate an Android WebView host project",
-		Long: `Create an ad-hoc Android Gradle project for a reverse-domain package id
-(App.ID / applicationId). The shell runs a multiarch Go binary and loads
-the UI in system WebView.
+func (androidCreateCmd) Description() string {
+	return "Generate an Android WebView host project. Not the happy path; prefer \"GOOS=android eletrocromo build\"."
+}
 
-Example:
-  eletrocromo android create \
-    --id br.tec.lew.eletrocromo.counter \
-    --name Counter \
-    --go-main ../../examples/counter \
-    --out ./dist/android-counter`,
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			absOut, err := filepath.Abs(out)
-			if err != nil {
-				return err
-			}
-			cfg := apk.Config{
-				PackageID: id,
-				AppName:   name,
-				GoMain:    goMain,
-			}
-			if cmd.Flags().Changed("version") {
-				cfg.VersionName = version
-			}
-			if cmd.Flags().Changed("code") {
-				cfg.VersionCode = code
-			}
-			if err := apk.Create(apk.Options{
-				OutDir: absOut,
-				Force:  force,
-				Config: cfg,
-			}); err != nil {
-				return err
-			}
-			outw := cmd.OutOrStdout()
-			if _, err := fmt.Fprintf(outw, "created Android host project\n  package: %s\n  out:     %s\n", id, absOut); err != nil {
-				return err
-			}
-			_, err = fmt.Fprintf(outw, "next:\n  1. set go_main in eletrocromo.json if needed\n  2. cd %s && ./scripts/build-go.sh\n  3. gradle wrapper && ./gradlew assembleDebug\n", absOut)
-			return err
-		},
+func (c *androidCreateCmd) Run(context.Context) error {
+	absOut, err := filepath.Abs(c.out.Value())
+	if err != nil {
+		return err
 	}
-
-	cmd.Flags().StringVar(&id, "id", "", "reverse-domain package id / applicationId (required)")
-	cmd.Flags().StringVar(&name, "name", "", "launcher label (default: last label of --id)")
-	cmd.Flags().StringVar(&out, "out", "", "output project directory (required)")
-	cmd.Flags().StringVar(&goMain, "go-main", ".", "Go main package directory (stored in eletrocromo.json)")
-	cmd.Flags().StringVar(&version, "version", "", "Android versionName (default: from VCS / -X)")
-	cmd.Flags().IntVar(&code, "code", 0, "Android versionCode (default: from version / git)")
-	cmd.Flags().BoolVar(&force, "force", false, "overwrite non-empty --out")
-	if err := cmd.MarkFlagRequired("id"); err != nil {
-		panic(err)
+	cfg := apk.Config{
+		PackageID:   c.id.Value(),
+		AppName:     c.name.Value(),
+		GoMain:      c.goMain.Value(),
+		VersionName: c.version.Value(),
+		VersionCode: c.code.Value(),
 	}
-	if err := cmd.MarkFlagRequired("out"); err != nil {
-		panic(err)
+	if err := apk.Create(apk.Options{
+		OutDir: absOut,
+		Force:  c.force.Value(),
+		Config: cfg,
+	}); err != nil {
+		return err
 	}
-
-	return cmd
+	if _, err := fmt.Fprintf(os.Stdout, "created Android host project\n  package: %s\n  out:     %s\n", c.id.Value(), absOut); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(os.Stdout, "next:\n  1. set go_main in eletrocromo.json if needed\n  2. cd %s && ./scripts/build-go.sh\n  3. gradle wrapper && ./gradlew assembleDebug\n", absOut)
+	return err
 }

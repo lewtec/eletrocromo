@@ -5,10 +5,11 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/lucasew/orvalho/pkg/workers"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEmbeddedGuestServesHome(t *testing.T) {
@@ -16,9 +17,7 @@ func TestEmbeddedGuestServesHome(t *testing.T) {
 		t.Skip("embed/guest.js looks like a placeholder — run: mise run build")
 	}
 	assets, err := fs.Sub(assetsRoot, "embed/assets")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	iso := workers.New(guestJS, workers.Options{
 		Bindings: map[string]workers.Binding{
 			"ASSETS": workers.NewAssetBinding(assets, "."),
@@ -32,20 +31,12 @@ func TestEmbeddedGuestServesHome(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer res.Body.Close()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = res.Body.Close() })
 	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.StatusCode != 200 {
-		t.Fatalf("status %d: %s", res.StatusCode, truncate(string(body), 400))
-	}
-	if !strings.Contains(string(body), "blockquote") {
-		t.Fatalf("missing blockquote: %s", truncate(string(body), 400))
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode, truncate(string(body), 400))
+	assert.Contains(t, string(body), "blockquote", truncate(string(body), 400))
 }
 
 func truncate(s string, n int) string {

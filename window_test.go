@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/lewtec/lewkit/x/driver/webview"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var errNoDisplay = errors.New("no display")
@@ -33,9 +35,7 @@ func TestRun_RequiresAppID(t *testing.T) {
 		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
 		Context: t.Context(),
 	}
-	if err := app.Run(); err == nil {
-		t.Fatal("expected error for missing App.ID")
-	}
+	require.Error(t, app.Run())
 }
 
 func TestRun_DesktopOpenError(t *testing.T) {
@@ -49,10 +49,7 @@ func TestRun_DesktopOpenError(t *testing.T) {
 		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
 		Context: t.Context(),
 	}
-	err := app.Run()
-	if !errors.Is(err, errNoDisplay) {
-		t.Fatalf("got %v", err)
-	}
+	require.ErrorIs(t, app.Run(), errNoDisplay)
 }
 
 func TestRun_DesktopServesHandler(t *testing.T) {
@@ -66,9 +63,7 @@ func TestRun_DesktopServesHandler(t *testing.T) {
 		v := &fakeView{done: make(chan struct{})}
 		go func() {
 			<-ctx.Done()
-			if err := v.Close(); err != nil {
-				t.Errorf("close: %v", err)
-			}
+			require.NoError(t, v.Close())
 		}()
 		return v, nil
 	}
@@ -79,9 +74,8 @@ func TestRun_DesktopServesHandler(t *testing.T) {
 		ID:      "br.tec.lew.test.window",
 		Context: ctx,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if _, err := io.WriteString(w, "pong"); err != nil {
-				t.Errorf("write: %v", err)
-			}
+			_, err := io.WriteString(w, "pong")
+			require.NoError(t, err)
 		}),
 	}
 	errCh := make(chan error, 1)
@@ -91,25 +85,20 @@ func TestRun_DesktopServesHandler(t *testing.T) {
 	select {
 	case cfg = <-opened:
 	case <-time.After(2 * time.Second):
-		t.Fatal("window was not opened")
+		require.Fail(t, "window was not opened")
 	}
-	if cfg.Profile == "" {
-		t.Fatal("profile dir was empty")
-	}
+	require.NotEmpty(t, cfg.Profile)
 	rec := httptest.NewRecorder()
 	cfg.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	if rec.Code != http.StatusOK || rec.Body.String() != "pong" {
-		t.Fatalf("status=%d body=%q", rec.Code, rec.Body.String())
-	}
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "pong", rec.Body.String())
 
 	cancel()
 	select {
 	case err := <-errCh:
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
-		t.Fatal("Run did not return")
+		require.Fail(t, "Run did not return")
 	}
 }
 
@@ -121,9 +110,7 @@ func TestWindowHandler_RoutesViewURL(t *testing.T) {
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			paths = append(paths, r.URL.Path)
 			seenHost = r.Host
-			if err := r.ParseForm(); err != nil {
-				t.Errorf("parse form: %v", err)
-			}
+			require.NoError(t, r.ParseForm())
 			if op := r.Form.Get("op"); op != "" {
 				seenOp = op
 			}
@@ -134,7 +121,8 @@ func TestWindowHandler_RoutesViewURL(t *testing.T) {
 				http.Redirect(w, r, "https://example.com/docs", http.StatusSeeOther)
 			default:
 				w.Header().Set("Content-Type", "text/html")
-				_, _ = io.WriteString(w, "page "+r.URL.Path)
+				_, err := io.WriteString(w, "page "+r.URL.Path)
+				require.NoError(t, err)
 			}
 		}),
 	}
@@ -143,29 +131,23 @@ func TestWindowHandler_RoutesViewURL(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "app://view9/go", strings.NewReader("op=inc"))
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d", rec.Code)
-	}
-	if rec.Header().Get("Location") != "" {
-		t.Fatalf("location %q", rec.Header().Get("Location"))
-	}
-	if rec.Body.String() != "page /" || seenOp != "inc" || seenHost != "127.0.0.1" || strings.Join(paths, ",") != "/go,/" {
-		t.Fatalf("body %q op %q host %q paths %v", rec.Body.String(), seenOp, seenHost, paths)
-	}
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, rec.Header().Get("Location"))
+	assert.Equal(t, "page /", rec.Body.String())
+	assert.Equal(t, "inc", seenOp)
+	assert.Equal(t, "127.0.0.1", seenHost)
+	assert.Equal(t, []string{"/go", "/"}, paths)
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "app://view9/away", nil)
 	handler.ServeHTTP(rec, req)
-	if rec.Header().Get("Location") != "https://example.com/docs" {
-		t.Fatalf("external location %q", rec.Header().Get("Location"))
-	}
+	assert.Equal(t, "https://example.com/docs", rec.Header().Get("Location"))
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "app://view9", nil)
 	handler.ServeHTTP(rec, req)
-	if paths[len(paths)-1] != "/" || rec.Body.String() != "page /" {
-		t.Fatalf("empty path became %q body %q", paths[len(paths)-1], rec.Body.String())
-	}
+	assert.Equal(t, "/", paths[len(paths)-1])
+	assert.Equal(t, "page /", rec.Body.String())
 }
 
 func TestURLHandler_ForwardsPathAndQuery(t *testing.T) {
@@ -177,16 +159,10 @@ func TestURLHandler_ForwardsPathAndQuery(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	base, err := http.NewRequest(http.MethodGet, upstream.URL+"/?token=abc", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	handler := urlHandler(base.URL)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/count", nil))
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status %d", rec.Code)
-	}
-	if got != "/count?token=abc" {
-		t.Fatalf("upstream URI %q", got)
-	}
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+	assert.Equal(t, "/count?token=abc", got)
 }

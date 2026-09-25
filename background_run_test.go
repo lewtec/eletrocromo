@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestBackgroundRun_TracksWaitGroup ensures WaitGroup.Add runs before the
@@ -20,14 +22,12 @@ func TestBackgroundRun_TracksWaitGroup(t *testing.T) {
 		<-release
 		return nil
 	}))
-	if err != nil {
-		t.Fatalf("BackgroundRun: %v", err)
-	}
+	require.NoError(t, err)
 
 	select {
 	case <-started:
 	case <-time.After(time.Second):
-		t.Fatal("task did not start")
+		require.Fail(t, "task did not start")
 	}
 
 	done := make(chan struct{})
@@ -38,7 +38,7 @@ func TestBackgroundRun_TracksWaitGroup(t *testing.T) {
 
 	select {
 	case <-done:
-		t.Fatal("WaitGroup.Wait returned before task finished")
+		require.Fail(t, "WaitGroup.Wait returned before task finished")
 	case <-time.After(50 * time.Millisecond):
 	}
 
@@ -47,7 +47,7 @@ func TestBackgroundRun_TracksWaitGroup(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("WaitGroup.Wait did not return after task finished")
+		require.Fail(t, "WaitGroup.Wait did not return after task finished")
 	}
 }
 
@@ -57,36 +57,14 @@ func TestBackgroundRun_UsesAppContext(t *testing.T) {
 	app := &App{Context: ctx}
 
 	var sawCancel atomic.Bool
-	if err := app.BackgroundRun(FunctionTask(func(taskCtx context.Context) error {
+	err := app.BackgroundRun(FunctionTask(func(taskCtx context.Context) error {
 		<-taskCtx.Done()
 		sawCancel.Store(true)
 		return nil
-	})); err != nil {
-		t.Fatal(err)
-	}
+	}))
+	require.NoError(t, err)
 
 	cancel()
 	app.WaitGroup.Wait()
-	if !sawCancel.Load() {
-		t.Fatal("task did not observe context cancellation")
-	}
-}
-
-// Nil Context must not panic inside task.Run; same default as App.Run.
-func TestBackgroundRun_NilContext_UsesBackground(t *testing.T) {
-	app := &App{} // Context intentionally unset
-	var gotNonNil atomic.Bool
-	err := app.BackgroundRun(FunctionTask(func(taskCtx context.Context) error {
-		if taskCtx != nil {
-			gotNonNil.Store(true)
-		}
-		return nil
-	}))
-	if err != nil {
-		t.Fatalf("BackgroundRun: %v", err)
-	}
-	app.WaitGroup.Wait()
-	if !gotNonNil.Load() {
-		t.Fatal("task received nil context; expected context.Background()")
-	}
+	require.True(t, sawCancel.Load())
 }

@@ -3,6 +3,9 @@ package os
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolve_EnvWins(t *testing.T) {
@@ -25,15 +28,11 @@ func TestResolve_EnvWins(t *testing.T) {
 		func() (string, error) { return "/unused-cache", nil },
 		func() (string, error) { return "/unused-config", nil },
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Data != "/data" || got.Cache != "/cache" || got.Config != "/config" {
-		t.Fatalf("got %+v", got)
-	}
-	if got.Inbox != filepath.Join("/cache", "inbox") {
-		t.Fatalf("Inbox = %q", got.Inbox)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/data", got.Data)
+	assert.Equal(t, "/cache", got.Cache)
+	assert.Equal(t, "/config", got.Config)
+	assert.Equal(t, filepath.Join("/cache", "inbox"), got.Inbox)
 }
 
 func TestDataHome_ByGOOS(t *testing.T) {
@@ -42,29 +41,15 @@ func TestDataHome_ByGOOS(t *testing.T) {
 	home := func() (string, error) { return "/home/u", nil }
 
 	got, err := dataHome("linux", getenv, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := filepath.Join("/home/u", ".local", "share")
-	if got != want {
-		t.Fatalf("linux: got %q want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join("/home/u", ".local", "share"), got)
 
 	got, err = dataHome("darwin", getenv, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want = filepath.Join("/home/u", "Library", "Application Support")
-	if got != want {
-		t.Fatalf("darwin: got %q want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join("/home/u", "Library", "Application Support"), got)
 
 	env["LOCALAPPDATA"] = filepath.Join("C:", "Users", "u", "AppData", "Local")
 	got, err = dataHome("windows", getenv, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != env["LOCALAPPDATA"] {
-		t.Fatalf("windows: got %q want %q", got, env["LOCALAPPDATA"])
-	}
+	require.NoError(t, err)
+	assert.Equal(t, env["LOCALAPPDATA"], got)
 }

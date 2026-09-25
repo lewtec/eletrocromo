@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/lewtec/eletrocromo/driver"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -52,12 +54,9 @@ func TestGet_PicksHighestPriorityCompatible(t *testing.T) {
 	driver.Register[probe](factory{id: "high", priority: 5, name: "high"})
 
 	got, err := driver.Get[probe](t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Name() != "high" {
-		t.Fatalf("Name() = %q; want high", got.Name())
-	}
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "high", got.Name())
 }
 
 func TestGet_NotFound(t *testing.T) {
@@ -65,9 +64,7 @@ func TestGet_NotFound(t *testing.T) {
 	t.Cleanup(driver.Reset)
 
 	_, err := driver.Get[probe](t.Context())
-	if !errors.Is(err, driver.ErrNotFound) {
-		t.Fatalf("err = %v; want ErrNotFound", err)
-	}
+	require.ErrorIs(t, err, driver.ErrNotFound)
 }
 
 func TestGet_Unavailable(t *testing.T) {
@@ -76,19 +73,13 @@ func TestGet_Unavailable(t *testing.T) {
 
 	driver.Register[probe](factory{id: "x", compat: errNope})
 	_, err := driver.Get[probe](t.Context())
-	if !errors.Is(err, driver.ErrUnavailable) {
-		t.Fatalf("err = %v; want ErrUnavailable", err)
-	}
-	if !errors.Is(err, errNope) {
-		t.Fatalf("err = %v; want errNope", err)
-	}
+	assert.ErrorIs(t, err, driver.ErrUnavailable)
+	assert.ErrorIs(t, err, errNope)
 }
 
 func TestGet_NotInterface(t *testing.T) {
 	_, err := driver.Get[int](t.Context())
-	if !errors.Is(err, driver.ErrNotInterface) {
-		t.Fatalf("err = %v; want ErrNotInterface", err)
-	}
+	require.ErrorIs(t, err, driver.ErrNotInterface)
 }
 
 func TestRegister_DuplicateIDPanics(t *testing.T) {
@@ -96,12 +87,9 @@ func TestRegister_DuplicateIDPanics(t *testing.T) {
 	t.Cleanup(driver.Reset)
 
 	driver.Register[probe](factory{id: "once"})
-	defer func() {
-		if recover() == nil {
-			t.Fatal("want panic")
-		}
-	}()
-	driver.Register[probe](factory{id: "once"})
+	require.Panics(t, func() {
+		driver.Register[probe](factory{id: "once"})
+	})
 }
 
 func TestWithResult(t *testing.T) {
@@ -112,10 +100,6 @@ func TestWithResult(t *testing.T) {
 	name, err := driver.WithResult(t.Context(), func(p probe) (string, error) {
 		return p.Name(), nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if name != "ok" {
-		t.Fatalf("name = %q; want ok", name)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "ok", name)
 }

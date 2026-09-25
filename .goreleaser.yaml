@@ -12,8 +12,6 @@ builds:
   - id: eletrocromo
     binary: eletrocromo
     main: ./cmd/eletrocromo
-    env:
-      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
@@ -27,17 +25,12 @@ builds:
     ldflags:
       - >-
         -s -w
-        -X github.com/lewtec/eletrocromo/internal/version.Version={{ .Version }}
-        -X github.com/lewtec/eletrocromo/internal/version.Commit={{ .Commit }}
-        -X github.com/lewtec/eletrocromo/internal/version.Date={{ .CommitDate }}
-        -X github.com/lewtec/eletrocromo/internal/version.BuiltBy=goreleaser
+        -X github.com/lewtec/lewkit/x/release.version={{ .Version }}
 
   # Desktop example binaries (same GOOS/GOARCH as the CLI).
   # Android APKs and macOS/iOS .app zips are attached by Autorelease, not here.
   - id: example-basic
     <<: &example-build
-      env:
-        - CGO_ENABLED=0
       goos:
         - linux
         - darwin
@@ -132,7 +125,7 @@ release:
 
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
 
-    Self-contained binaries (`CGO_ENABLED=0`). Install example:
+    Install example:
 
     ```bash
     # Linux x86_64

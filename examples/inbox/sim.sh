@@ -1,37 +1,18 @@
 #!/usr/bin/env bash
-# Build Inbox for the iOS Simulator, boot a phone, install, then ping
-# the custom scheme and drop a markdown file into Cache/open.jsonl.
+# Inbox-only Simulator helpers. Launch itself is `mise run ios:run`.
+# ping opens the custom scheme and drops a markdown file into Cache/open.jsonl.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 BUNDLE="br.tec.lew.eletrocromo.inbox"
-APP="$ROOT/dist/Inbox.app"
 SCHEME="eletrocromo-inbox"
-
-boot_sim() {
-	if xcrun simctl list devices booted | grep -q iPhone; then
-		return
-	fi
-	local udid
-	udid="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/{print $2; exit}')"
-	if [ -z "$udid" ]; then
-		echo "no available iPhone simulator" >&2
-		exit 1
-	fi
-	xcrun simctl boot "$udid"
-	open -a Simulator
-	xcrun simctl bootstatus "$udid" -b
-}
 
 cmd="${1:-sim}"
 case "$cmd" in
 build)
-	go run ./cmd/eletrocromo build ios \
-		--config examples/inbox/eletrocromo.json \
-		--out "$APP" \
-		--workdir dist/ios-inbox
+	go run "$ROOT/cmd/eletrocromo" run --goos ios examples/inbox/eletrocromo.json
 	;;
 ping)
 	xcrun simctl openurl booted "${SCHEME}://from-simctl"
@@ -45,9 +26,6 @@ ping)
 	;;
 sim)
 	"$0" build
-	boot_sim
-	xcrun simctl install booted "$APP"
-	xcrun simctl launch booted "$BUNDLE" || true
 	sleep 4
 	"$0" ping
 	echo "Inbox is on the simulator. Page reloads every 3s."

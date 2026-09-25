@@ -5,46 +5,35 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Splash error paths must not render the authenticated READY URL (token in query).
 func TestCreate_MainActivityRedactsErrorURLs(t *testing.T) {
 	out := t.TempDir()
-	if err := Create(Options{
+	require.NoError(t, Create(Options{
 		OutDir: out,
 		Config: Config{
 			PackageID: "br.tec.lew.counter",
 			AppName:   "Counter",
 			GoMain:    ".",
 		},
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
 	mainKt, err := os.ReadFile(filepath.Join(out, "app/src/main/java/br/tec/lew/counter/MainActivity.kt"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	s := string(mainKt)
 
-	if !strings.Contains(s, "fun redactUrlForDisplay") {
-		t.Fatal("MainActivity missing redactUrlForDisplay helper")
-	}
-	if !strings.Contains(s, "redactUrlForDisplay(request.url") {
-		t.Fatal("expected redactUrlForDisplay(request.url…) on error paths")
-	}
+	assert.Contains(t, s, "fun redactUrlForDisplay")
+	assert.Contains(t, s, "redactUrlForDisplay(request.url")
 	// Raw request.url must not appear in splash detail strings.
-	if strings.Contains(s, "\n${request.url}") {
-		t.Fatal("load error path still interpolates raw request.url")
-	}
+	assert.NotContains(t, s, "\n${request.url}")
 	if strings.Contains(s, "append(reqUrl)") {
 		// reqUrl must be assigned from redactUrlForDisplay
-		if !strings.Contains(s, "val reqUrl = redactUrlForDisplay(") {
-			t.Fatal("HTTP error reqUrl is not redacted")
-		}
+		assert.Contains(t, s, "val reqUrl = redactUrlForDisplay(")
 	}
 	// Generated source should not hardcode a sample token query in error UI.
-	if strings.Contains(s, "?token=") {
-		t.Fatal("MainActivity source embeds ?token=")
-	}
+	assert.NotContains(t, s, "?token=")
 }

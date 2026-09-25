@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // Empty AuthToken must not authenticate anyone. ConstantTimeCompare("", "") is
@@ -37,9 +39,7 @@ func TestServeHTTP_EmptyAuthToken_FailClosed(t *testing.T) {
 			req := newAuthRequest(http.MethodGet, "/", tt.tokenParam, tt.cookieValue)
 			w := httptest.NewRecorder()
 			app.ServeHTTP(w, req)
-			if w.Code != http.StatusUnauthorized {
-				t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, w.Code)
-			}
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
 		})
 	}
 }

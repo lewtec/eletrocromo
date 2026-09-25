@@ -1,17 +1,11 @@
 package main
 
-import (
-	"github.com/spf13/cobra"
-)
+type androidCmd struct {
+	create *androidCreateCmd
+	init   *androidCreateCmd `cmd:"init"`
+	build  *buildAndroidCmd
+}
 
-func newAndroidCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:        "android",
-		Short:      "Android packaging (prefer: eletrocromo build android)",
-		Long:       "Legacy namespace. Prefer \"eletrocromo build android\" for JIT APK builds. \"create\" scaffolds a host project (not the happy path).",
-		Deprecated: "use \"eletrocromo build android\" (and \"build icons\")",
-	}
-	cmd.AddCommand(newAndroidCreateCmd())
-	cmd.AddCommand(newAndroidBuildCmd())
-	return cmd
+func (androidCmd) Description() string {
+	return "Legacy Android commands. Prefer \"GOOS=android eletrocromo build\" and \"eletrocromo icons\"."
 }

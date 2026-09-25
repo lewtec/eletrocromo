@@ -2,18 +2,18 @@ package mac
 
 import (
 	"bytes"
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuild_GoOnly_Counter(t *testing.T) {
 	repoRoot, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	counterDir := filepath.Join(repoRoot, "examples", "counter")
 	if _, err := os.Stat(filepath.Join(counterDir, "main.go")); err != nil {
 		t.Skip("examples/counter not present")
@@ -34,22 +34,15 @@ func TestBuild_GoOnly_Counter(t *testing.T) {
 		Stdout:      &buf,
 		Stderr:      &buf,
 	})
-	if err != nil {
-		t.Fatalf("%v\n%s", err, buf.String())
-	}
-	if res.HelperPath == "" {
-		t.Fatal("empty helper path")
-	}
+	require.NoError(t, err, buf.String())
+	require.NotEmpty(t, res.HelperPath)
 	st, err := os.Stat(res.HelperPath)
-	if err != nil || st.Size() < 1000 {
-		t.Fatalf("helper %s: %v size=%d", res.HelperPath, err, st.Size())
-	}
-	if _, err := os.Stat(filepath.Join(work, "project.yml")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(work, "Resources", "AppIcon.icns")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, st.Size(), int64(1000))
+	_, err = os.Stat(filepath.Join(work, "project.yml"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(work, "Resources", "AppIcon.icns"))
+	require.NoError(t, err)
 }
 
 func TestBuild_FullRequiresDarwin(t *testing.T) {
@@ -61,7 +54,5 @@ func TestBuild_FullRequiresDarwin(t *testing.T) {
 		BaseDir: t.TempDir(),
 		OutApp:  filepath.Join(t.TempDir(), "X.app"),
 	})
-	if !errors.Is(err, ErrMacOSRequired) {
-		t.Fatalf("got %v want ErrMacOSRequired", err)
-	}
+	require.ErrorIs(t, err, ErrMacOSRequired)
 }

@@ -167,7 +167,7 @@ func page(scheme string, d dirs.Dirs, events []event, names []string, probes []u
 			return templ_7745c5c3_Err
 		}
 		if len(events) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<p class=\"opacity-70\">None yet. From the Mac: <code>mise run ios:inbox:ping</code></p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<p class=\"opacity-70\">None yet. From the Mac: <code>bash examples/inbox/sim.sh ping</code></p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

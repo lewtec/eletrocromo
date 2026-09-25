@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateAppID(t *testing.T) {
@@ -15,9 +18,7 @@ func TestValidateAppID(t *testing.T) {
 		"org.foo_bar.baz",
 	}
 	for _, id := range ok {
-		if err := ValidateAppID(id); err != nil {
-			t.Errorf("%q: %v", id, err)
-		}
+		assert.NoError(t, ValidateAppID(id), id)
 	}
 	bad := []string{
 		"",
@@ -32,9 +33,7 @@ func TestValidateAppID(t *testing.T) {
 		"1com.example",
 	}
 	for _, id := range bad {
-		if err := ValidateAppID(id); err == nil {
-			t.Errorf("%q: want error", id)
-		}
+		assert.Error(t, ValidateAppID(id), id)
 	}
 }
 
@@ -43,26 +42,16 @@ func TestProfileDir_IsolatesByAppID(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", root)
 
 	a, err := ProfileDir("br.tec.lew.counter")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	b, err := ProfileDir("br.tec.lew.basic")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a == b {
-		t.Fatal("profiles must differ by app id")
-	}
-	if !strings.HasPrefix(a, root) || !strings.HasPrefix(b, root) {
-		t.Fatalf("profiles not under XDG_DATA_HOME: %q %q", a, b)
-	}
-	if filepath.Base(a) != "br.tec.lew.counter" {
-		t.Fatalf("base = %q", filepath.Base(a))
-	}
+	require.NoError(t, err)
+	assert.NotEqual(t, a, b)
+	assert.True(t, strings.HasPrefix(a, root), a)
+	assert.True(t, strings.HasPrefix(b, root), b)
+	assert.Equal(t, "br.tec.lew.counter", filepath.Base(a))
 	st, err := os.Stat(a)
-	if err != nil || !st.IsDir() {
-		t.Fatalf("profile dir missing: %v", err)
-	}
+	require.NoError(t, err)
+	assert.True(t, st.IsDir())
 }
 
 func TestUserDataDirFor_ByGOOS(t *testing.T) {
@@ -71,40 +60,22 @@ func TestUserDataDirFor_ByGOOS(t *testing.T) {
 
 	got := userDataDirFor("linux", "/home/u", getenv)
 	want := filepath.Join("/home/u", ".local", "share")
-	if got != want {
-		t.Fatalf("linux: got %q want %q", got, want)
-	}
+	assert.Equal(t, want, got)
 
-	// Even if a Linux home "looks" like macOS layout, GOOS wins (no Stat heuristic).
-	got = userDataDirFor("linux", "/home/u", getenv)
 	macish := filepath.Join("/home/u", "Library", "Application Support")
-	if got == macish {
-		t.Fatal("linux must not use Application Support")
-	}
+	assert.NotEqual(t, macish, userDataDirFor("linux", "/home/u", getenv))
 
 	got = userDataDirFor("darwin", "/Users/u", getenv)
 	want = filepath.Join("/Users/u", "Library", "Application Support")
-	if got != want {
-		t.Fatalf("darwin: got %q want %q", got, want)
-	}
+	assert.Equal(t, want, got)
 
 	env["LOCALAPPDATA"] = filepath.Join("C:", "Users", "u", "AppData", "Local")
-	got = userDataDirFor("windows", filepath.Join("C:", "Users", "u"), getenv)
-	if got != env["LOCALAPPDATA"] {
-		t.Fatalf("windows LOCALAPPDATA: got %q want %q", got, env["LOCALAPPDATA"])
-	}
+	assert.Equal(t, env["LOCALAPPDATA"], userDataDirFor("windows", filepath.Join("C:", "Users", "u"), getenv))
 
 	delete(env, "LOCALAPPDATA")
-	got = userDataDirFor("windows", filepath.Join("C:", "Users", "u"), getenv)
 	want = filepath.Join("C:", "Users", "u", "AppData", "Local")
-	if got != want {
-		t.Fatalf("windows default: got %q want %q", got, want)
-	}
+	assert.Equal(t, want, userDataDirFor("windows", filepath.Join("C:", "Users", "u"), getenv))
 
-	// Other Unix-like GOOS follows XDG-style default.
-	got = userDataDirFor("freebsd", "/home/u", getenv)
 	want = filepath.Join("/home/u", ".local", "share")
-	if got != want {
-		t.Fatalf("freebsd: got %q want %q", got, want)
-	}
+	assert.Equal(t, want, userDataDirFor("freebsd", "/home/u", getenv))
 }

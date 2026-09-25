@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/gen/common"
+	"github.com/lewtec/eletrocromo/internal/gen/goenv"
 	"github.com/lewtec/eletrocromo/internal/icons"
 	"github.com/lewtec/eletrocromo/internal/version"
 )
@@ -293,8 +294,7 @@ func buildArchive(dest, goMainDir, workDir, sdk string, stamp version.Info, stdo
 		".",
 	)
 	cmd.Dir = goMainDir
-	cmd.Env = append(os.Environ(),
-		"CGO_ENABLED=1",
+	cmd.Env = goenv.Merge(os.Environ(),
 		"GOOS=ios",
 		"GOARCH="+goarch,
 		"CC="+wrap,

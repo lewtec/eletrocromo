@@ -16,7 +16,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lewtec/eletrocromo/driver/open"
-	"github.com/lewtec/lewkit/x/driver/webview"
 )
 
 // App acts as the core controller for the application, managing the lifecycle,
@@ -31,7 +30,8 @@ type App struct {
 	Handler   http.Handler
 	AuthToken string
 	WaitGroup sync.WaitGroup
-	Context   context.Context
+	// Context is the process lifetime. Required.
+	Context context.Context
 
 	// NoUI skips the desktop web view and only serves loopback HTTP.
 	// Used by the Android, iOS, and macOS packaged hosts (and tests).
@@ -50,20 +50,12 @@ const ReadyLinePrefix = "ELETROCROMO_READY "
 
 const AUTH_COOKIE_KEY = "eletrocromo_token"
 
-// background is the default when App.Context is nil (same for Run and BackgroundRun).
-// Package-level so methods do not call context.Background directly.
-var background = context.Background()
-
 // BackgroundRun starts task in a new goroutine and tracks it on WaitGroup.
 // It returns immediately after scheduling; task errors are logged.
 // Callers must not wrap BackgroundRun in another goroutine — Add runs
 // synchronously so WaitGroup.Wait is race-free with respect to this call.
-// A nil App.Context is treated as context.Background(), matching Run.
 func (a *App) BackgroundRun(task Task) error {
 	ctx := a.Context
-	if ctx == nil {
-		ctx = background
-	}
 	a.WaitGroup.Add(1)
 	go func() {
 		defer a.WaitGroup.Done()
@@ -141,9 +133,6 @@ func (a *App) Run() error {
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
 	}
-	if a.Context == nil {
-		a.Context = background
-	}
 	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
 
@@ -208,40 +197,6 @@ func (a *App) Run() error {
 		}
 	}
 	<-ctx.Done()
-	a.WaitGroup.Wait()
-	return nil
-}
-
-// runDesktop opens the system web view and blocks until it closes or ctx ends.
-// The handler runs in-process. There is no loopback listener on this path.
-func (a *App) runDesktop(ctx context.Context, cancel context.CancelFunc) error {
-	profileDir, err := ProfileDir(a.ID)
-	if err != nil {
-		return err
-	}
-	log.Printf("opening web view (profile %s)", profileDir)
-	view, err := openDesktopView(ctx, webview.Config{
-		Profile: profileDir,
-		Handler: a.windowHandler(),
-	})
-	if err != nil {
-		cancel()
-		a.WaitGroup.Wait()
-		return fmt.Errorf("open web view: %w", err)
-	}
-	go func() {
-		select {
-		case <-view.Done():
-			log.Printf("web view closed")
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-	waitDesktopView(ctx, view)
-	if err := view.Close(); err != nil {
-		log.Printf("close web view: %v", err)
-	}
-	cancel()
 	a.WaitGroup.Wait()
 	return nil
 }

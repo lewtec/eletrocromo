@@ -1,9 +1,13 @@
+//go:build !android
+
 package eletrocromo
 
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -21,6 +25,71 @@ type appView interface {
 
 // openDesktopView opens the system web view. Tests may replace it.
 var openDesktopView = openSystemView
+
+// runDesktop opens the system web view and blocks until it closes or ctx ends.
+// The handler runs in-process. There is no loopback listener on this path.
+func (a *App) runDesktop(ctx context.Context, cancel context.CancelFunc) error {
+	profileDir, err := ProfileDir(a.ID)
+	if err != nil {
+		return err
+	}
+	log.Printf("opening web view (profile %s)", profileDir)
+	view, err := openDesktopView(ctx, webview.Config{
+		Profile: profileDir,
+		Handler: a.windowHandler(),
+	})
+	if err != nil {
+		cancel()
+		a.WaitGroup.Wait()
+		return fmt.Errorf("open web view: %w", err)
+	}
+	go func() {
+		select {
+		case <-view.Done():
+			log.Printf("web view closed")
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	waitDesktopView(ctx, view)
+	if err := view.Close(); err != nil {
+		log.Printf("close web view: %v", err)
+	}
+	cancel()
+	a.WaitGroup.Wait()
+	return nil
+}
+
+func launchBrowserURL(ctx context.Context, urlStr, appID string) error {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return fmt.Errorf("parse app url: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%w: %s", errInvalidURLScheme, u.Scheme)
+	}
+	profileDir, err := ProfileDir(appID)
+	if err != nil {
+		return err
+	}
+	view, err := openDesktopView(ctx, webview.Config{
+		Profile: profileDir,
+		Handler: urlHandler(u),
+	})
+	if err != nil {
+		return err
+	}
+	go func() {
+		select {
+		case <-ctx.Done():
+			if err := view.Close(); err != nil {
+				log.Printf("close web view: %v", err)
+			}
+		case <-view.Done():
+		}
+	}()
+	return nil
+}
 
 func openSystemView(ctx context.Context, cfg webview.Config) (appView, error) {
 	if runtime.GOOS == "darwin" && !thread.Bound() {

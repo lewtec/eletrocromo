@@ -5,6 +5,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const testAppID = "br.tec.lew.test"
@@ -12,27 +15,17 @@ const testAppID = "br.tec.lew.test"
 var ErrTestBoom = errors.New("boom")
 
 func TestFunctionTask_Run(t *testing.T) {
-	want := ErrTestBoom
-	task := FunctionTask(func(ctx context.Context) error {
-		if ctx == nil {
-			t.Fatal("nil context")
-		}
-		return want
+	task := FunctionTask(func(context.Context) error {
+		return ErrTestBoom
 	})
-	if err := task.Run(t.Context()); !errors.Is(err, want) {
-		t.Fatalf("got %v, want %v", err, want)
-	}
+	require.ErrorIs(t, task.Run(t.Context()), ErrTestBoom)
 }
 
 func TestNewKeepAliveTask_Completes(t *testing.T) {
 	task := NewKeepAliveTask(5 * time.Millisecond)
 	start := time.Now()
-	if err := task.Run(t.Context()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if elapsed := time.Since(start); elapsed < 5*time.Millisecond {
-		t.Fatalf("returned too early: %v", elapsed)
-	}
+	require.NoError(t, task.Run(t.Context()))
+	assert.GreaterOrEqual(t, time.Since(start), 5*time.Millisecond)
 }
 
 func TestNewKeepAliveTask_CancelsOnContext(t *testing.T) {
@@ -42,38 +35,24 @@ func TestNewKeepAliveTask_CancelsOnContext(t *testing.T) {
 	cancel()
 
 	start := time.Now()
-	if err := task.Run(ctx); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Fatalf("did not observe cancel promptly: %v", elapsed)
-	}
+	require.NoError(t, task.Run(ctx))
+	assert.Less(t, time.Since(start), time.Second)
 }
 
 func TestNewBrowserLaunchTask_InvalidURL(t *testing.T) {
 	task := NewBrowserLaunchTask("://bad", testAppID)
-	err := task.Run(t.Context())
-	if err == nil {
-		t.Fatal("expected parse error")
-	}
+	require.Error(t, task.Run(t.Context()))
 }
 
 func TestNewBrowserLaunchTask_RejectsNonHTTPScheme(t *testing.T) {
 	task := NewBrowserLaunchTask("file:///etc/passwd", testAppID)
-	err := task.Run(t.Context())
-	if err == nil {
-		t.Fatal("expected scheme error")
-	}
+	require.ErrorIs(t, task.Run(t.Context()), errInvalidURLScheme)
 }
 
-// Cancelled context must short-circuit before the web view opens.
 func TestNewBrowserLaunchTask_RespectsCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	task := NewBrowserLaunchTask("http://127.0.0.1:9/", testAppID)
-	err := task.Run(ctx)
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("got %v, want context.Canceled", err)
-	}
+	require.ErrorIs(t, task.Run(ctx), context.Canceled)
 }

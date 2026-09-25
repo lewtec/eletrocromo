@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/gen/common"
+	"github.com/lewtec/eletrocromo/internal/gen/goenv"
 	"github.com/lewtec/eletrocromo/internal/icons"
 	"github.com/lewtec/eletrocromo/internal/version"
 )
@@ -198,7 +199,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 }
 
 // BuildGoLibs cross-compiles the app into workDir/app/src/main/jniLibs/<abi>/libeletrocromo.so.
-// stamp is injected via -ldflags -X (goreleaser-style) when apps import internal/version.
+// stamp is injected via -ldflags -X github.com/lewtec/lewkit/x/release.version.
 func BuildGoLibs(workDir, goMainDir string, abis []string, stamp version.Info, stdout, stderr io.Writer) ([]string, error) {
 	if len(abis) == 0 {
 		abis = DefaultABIs
@@ -220,18 +221,14 @@ func BuildGoLibs(workDir, goMainDir string, abis []string, stamp version.Info, s
 		}
 		cmd := exec.Command("go", "build", "-trimpath", "-ldflags", ldflags, "-o", dest, ".")
 		cmd.Dir = goMainDir
-		cmd.Env = append(os.Environ(),
-			"CGO_ENABLED=0",
-			"GOOS=android",
-			"GOARCH="+goarch,
-		)
+		cmd.Env = goenv.Merge(os.Environ(), "GOOS=android", "GOARCH="+goarch)
 		if goarch == "arm" {
 			cmd.Env = append(cmd.Env, "GOARM=7")
 		}
 		cmd.Stdout = stdout
 		cmd.Stderr = stderr
 		if err := cmd.Run(); err != nil {
-			return nil, fmt.Errorf("go build %s (GOARCH=%s CGO_ENABLED=0): %w\nnote: pure Go android builds typically only support arm64-v8a without an NDK; set abis in eletrocromo.json", abi, goarch, err)
+			return nil, fmt.Errorf("go build %s (GOARCH=%s): %w\nnote: pure Go android builds typically only support arm64-v8a without an NDK; set abis in eletrocromo.json", abi, goarch, err)
 		}
 		out = append(out, dest)
 	}
