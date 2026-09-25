@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,28 +12,71 @@ import (
 	"github.com/lewtec/eletrocromo/internal/icons"
 )
 
-func TestRoot_HelpListsBuild(t *testing.T) {
-	cmd := newRootCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"--help"})
-	if err := cmd.Execute(); err != nil {
+func runCLI(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	oldErr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
 		t.Fatal(err)
 	}
-	s := out.String()
-	if !strings.Contains(s, "build") {
-		t.Fatalf("help missing build:\n%s", s)
+	os.Stderr = w
+	out, runErr := captureStdout(t, func() error {
+		return run(t.Context(), args)
+	})
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = oldErr
+	var errBuf bytes.Buffer
+	if _, err := io.Copy(&errBuf, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return out + errBuf.String(), runErr
+}
+
+func captureStdout(t *testing.T, fn func() error) (string, error) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	var buf bytes.Buffer
+	copied := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(&buf, r)
+		copied <- err
+	}()
+	runErr := fn()
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = old
+	if err := <-copied; err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String(), runErr
+}
+
+func TestRoot_HelpListsBuild(t *testing.T) {
+	out, err := runCLI(t, "--help")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "build") {
+		t.Fatalf("help missing build:\n%s", out)
 	}
 }
 
 func TestBuild_BareErrors(t *testing.T) {
-	cmd := newRootCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"build"})
-	err := cmd.Execute()
+	_, err := runCLI(t, "build")
 	if err == nil {
 		t.Fatal("expected error for bare build")
 	}
@@ -43,13 +87,9 @@ func TestBuild_BareErrors(t *testing.T) {
 
 func TestBuildIcons_Default(t *testing.T) {
 	dir := t.TempDir()
-	cmd := newRootCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"build", "icons", "--output", filepath.Join(dir, "icons"), "--refresh-icons"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("%v\n%s", err, out.String())
+	out, err := runCLI(t, "build", "icons", "--output", filepath.Join(dir, "icons"), "--refresh-icons")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "icons", "manifest.json")); err != nil {
 		t.Fatal(err)
@@ -136,16 +176,12 @@ func TestEnsureBuildIcons(t *testing.T) {
 
 func TestRunIconsThen(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "icons")
-	cmd := newRootCmd()
-	cmd.SetContext(t.Context())
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-
 	var got string
-	err := runIconsThen(cmd, iconThen{src: "", out: out, refresh: false, name: "work"}, func(iconRoot string) error {
-		got = iconRoot
-		return nil
+	log, err := captureStdout(t, func() error {
+		return runIconsThen(t.Context(), iconThen{src: "", out: out, refresh: false, name: "work"}, func(iconRoot string) error {
+			got = iconRoot
+			return nil
+		})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -153,8 +189,8 @@ func TestRunIconsThen(t *testing.T) {
 	if !icons.Complete(got) {
 		t.Fatalf("work ran without a complete tree: %s", got)
 	}
-	if !strings.Contains(buf.String(), "icons →") {
-		t.Fatalf("generate log: %s", buf.String())
+	if !strings.Contains(log, "icons →") {
+		t.Fatalf("generate log: %s", log)
 	}
 }
 
@@ -177,26 +213,17 @@ func TestResolveIconOutput(t *testing.T) {
 }
 
 func TestVersionCmd(t *testing.T) {
-	cmd := newRootCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"version"})
-	if err := cmd.Execute(); err != nil {
+	out, err := runCLI(t, "version")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(out.String()) == "" {
+	if strings.TrimSpace(out) == "" {
 		t.Fatal("empty version output")
 	}
 }
 
 func TestAndroidCreate_RequiredFlags(t *testing.T) {
-	cmd := newRootCmd()
-	var errBuf bytes.Buffer
-	cmd.SetOut(&bytes.Buffer{})
-	cmd.SetErr(&errBuf)
-	cmd.SetArgs([]string{"android", "create"})
-	err := cmd.Execute()
+	_, err := runCLI(t, "android", "create")
 	if err == nil {
 		t.Fatal("expected error without --id/--out")
 	}
@@ -207,24 +234,20 @@ func TestAndroidCreate_WritesProject(t *testing.T) {
 	// Cobra reuses process; run into empty subdir.
 	dest := filepath.Join(outDir, "proj")
 
-	cmd := newRootCmd()
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{
+	buf, err := runCLI(t,
 		"android", "create",
 		"--id", "br.tec.lew.cli_test",
 		"--name", "CLITest",
 		"--out", dest,
 		"--go-main", ".",
-	})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("%v\n%s", err, buf.String())
+	)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, buf)
 	}
 	if _, err := os.Stat(filepath.Join(dest, "eletrocromo.json")); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(buf.String(), "br.tec.lew.cli_test") {
-		t.Fatalf("stdout: %s", buf.String())
+	if !strings.Contains(buf, "br.tec.lew.cli_test") {
+		t.Fatalf("stdout: %s", buf)
 	}
 }

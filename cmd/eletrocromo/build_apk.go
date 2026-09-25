@@ -1,138 +1,40 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/gen/apk"
-	"github.com/lewtec/eletrocromo/internal/icons"
-	"github.com/spf13/cobra"
+	"github.com/lewtec/lewkit/x/cmd"
 )
 
 // ErrMissingPackageID is returned when build android has no package_id (config or --id).
-// Callers can use errors.Is.
 var ErrMissingPackageID = errors.New("package id required")
 
-func newBuildAndroidCmd() *cobra.Command {
-	var (
-		configPath  string
-		id          string
-		name        string
-		goMain      string
-		version     string
-		code        int
-		out         string
-		workDir     string
-		keepWorkDir bool
-		goOnly      bool
-		iconPath    string
-		iconOutput  string
-		refresh     bool
-	)
-
-	cmd := &cobra.Command{
-		Use:   "android",
-		Short: "JIT Android host + multiarch Go + debug APK",
-		Long: `Generate the Android WebView host, cross-compile the Go app
-(GOOS=android, multi-ABI), and assemble a debug APK.
-
-Runs "build icons" first when the icon tree is incomplete (or always with
---refresh-icons). Launcher mipmaps are copied into the JIT host.
-
-Standard config: eletrocromo.json (or --config). Flags override.
-
-Requires for a full APK:
-  - Go toolchain (CGO_ENABLED=0 GOOS=android)
-  - JDK 17+ (java on PATH)
-  - Android SDK (ANDROID_HOME or ANDROID_SDK_ROOT)
-  - Gradle 8.9+ on PATH (or gradlew in --workdir)
-
-Use --go-only to stop after jniLibs (no SDK).
-
-Example (from examples/counter):
-  eletrocromo build android
-  eletrocromo build android --out ../../dist/counter-debug.apk`,
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-
-			cfg, baseDir, err := loadAPKConfig(cwd, configPath, id, name, goMain, version, code, cmd)
-			if err != nil {
-				return err
-			}
-			if strings.TrimSpace(cfg.PackageID) == "" {
-				return fmt.Errorf("%w: set package_id in %s or pass --id", ErrMissingPackageID, apk.ConfigFileName)
-			}
-
-			// Same icon flag/config/output rules as "build icons".
-			iconSrc := resolveIconSource(cwd, iconPath, baseDir, cfg.Icon)
-			iconOut := resolveIconOutput(cwd, iconOutput)
-
-			outAPK := strings.TrimSpace(out)
-			if outAPK == "" && !goOnly {
-				outAPK = apk.DefaultOutAPK(cfg.PackageID, cwd)
-			}
-
-			return runIconsThen(cmd, iconThen{src: iconSrc, out: iconOut, refresh: refresh, name: "android"}, func(iconRoot string) error {
-				result, err := apk.Build(apk.BuildOptions{
-					Config:      cfg,
-					BaseDir:     baseDir,
-					WorkDir:     workDir,
-					KeepWorkDir: keepWorkDir || workDir != "",
-					OutAPK:      outAPK,
-					GoOnly:      goOnly,
-					IconRoot:    iconRoot,
-					Stdout:      cmd.OutOrStdout(),
-					Stderr:      cmd.ErrOrStderr(),
-				})
-				if err != nil {
-					return err
-				}
-				outw := cmd.OutOrStdout()
-				if goOnly {
-					if _, err := fmt.Fprintf(outw, "go libs:\n"); err != nil {
-						return err
-					}
-					for _, p := range result.JNILibs {
-						if _, err := fmt.Fprintf(outw, "  %s\n", p); err != nil {
-							return err
-						}
-					}
-					_, err = fmt.Fprintf(outw, "work dir: %s\n", result.WorkDir)
-					return err
-				}
-				_, err = fmt.Fprintf(outw, "ok %s\n", result.APKPath)
-				return err
-			})
-		},
-	}
-
-	cmd.Flags().StringVar(&configPath, "config", "", "path to eletrocromo.json (default: ./eletrocromo.json if present)")
-	cmd.Flags().StringVar(&id, "id", "", "package id / applicationId (overrides config)")
-	cmd.Flags().StringVar(&name, "name", "", "launcher label (overrides config)")
-	cmd.Flags().StringVar(&goMain, "go-main", ".", "Go main package directory (overrides config)")
-	cmd.Flags().StringVar(&version, "version", "", "versionName (default: git describe / goreleaser -X / devel)")
-	cmd.Flags().IntVar(&code, "code", 0, "versionCode (default: semver map or git rev-list count)")
-	cmd.Flags().StringVar(&out, "out", "", "output APK path (default: dist/<name>-debug.apk)")
-	cmd.Flags().StringVar(&workDir, "workdir", "", "Gradle project dir (default: temp; kept if set)")
-	cmd.Flags().BoolVar(&keepWorkDir, "keep-workdir", false, "do not delete temp workdir after success")
-	cmd.Flags().BoolVar(&goOnly, "go-only", false, "only cross-compile Go into jniLibs (skip Gradle/SDK)")
-	cmd.Flags().StringVar(&iconPath, "icon", "", "master PNG/JPEG (overrides config icon)")
-	cmd.Flags().StringVar(&iconOutput, "output", icons.DefaultOutputDir, "icon tree root")
-	cmd.Flags().BoolVar(&refresh, "refresh-icons", false, "regenerate icons even if present")
-
-	return cmd
+// hostFlags are the flags shared by build android, build macos, and build ios.
+type hostFlags struct {
+	config      cmd.StringArg   `long:"config" default:"" help:"path to eletrocromo.json (default: ./eletrocromo.json if present)"`
+	id          cmd.StringArg   `long:"id" default:"" help:"package id (overrides config)"`
+	name        cmd.StringArg   `long:"name" default:"" help:"app display name (overrides config)"`
+	goMain      cmd.StringArg   `long:"go-main" default:"" help:"Go main package directory (overrides config; default .)"`
+	version     cmd.StringArg   `long:"version" default:"" help:"version name (default: git describe / goreleaser -X / devel)"`
+	code        cmd.IntArg[int] `long:"code" default:"0" help:"version code (default: semver map or git rev-list count)"`
+	out         cmd.StringArg   `long:"out" default:"" help:"output path"`
+	workDir     cmd.StringArg   `long:"workdir" default:"" help:"project dir (default: temp; kept if set)"`
+	keepWorkDir cmd.Flag        `long:"keep-workdir" help:"do not delete temp workdir after success"`
+	goOnly      cmd.Flag        `long:"go-only" help:"stop before the platform build"`
+	icon        cmd.StringArg   `long:"icon" default:"" help:"master PNG/JPEG (overrides config icon)"`
+	output      cmd.StringArg   `long:"output" default:"dist/icons" help:"icon tree root"`
+	refresh     cmd.Flag        `long:"refresh-icons" help:"regenerate icons even if present"`
 }
 
-func loadAPKConfig(cwd, configPath, id, name, goMain, version string, code int, cmd *cobra.Command) (apk.Config, string, error) {
+func (f hostFlags) load(cwd string) (apk.Config, string, error) {
 	var cfg apk.Config
 	baseDir := cwd
-	cfgPath := strings.TrimSpace(configPath)
+	cfgPath := strings.TrimSpace(f.config.Value())
 	if cfgPath == "" {
 		cfgPath = defaultConfigPath(cwd)
 	}
@@ -144,21 +46,70 @@ func loadAPKConfig(cwd, configPath, id, name, goMain, version string, code int, 
 		cfg = loaded
 		baseDir = dir
 	}
-
-	overlay := apk.Config{
-		PackageID: id,
-		AppName:   name,
-		GoMain:    goMain,
-	}
-	if cmd.Flags().Changed("code") {
-		overlay.VersionCode = code
-	}
-	if cmd.Flags().Changed("version") {
-		overlay.VersionName = version
-	}
-	if !cmd.Flags().Changed("go-main") {
-		overlay.GoMain = ""
-	}
-	cfg = apk.Merge(cfg, overlay)
+	cfg = apk.Merge(cfg, apk.Config{
+		PackageID:   f.id.Value(),
+		AppName:     f.name.Value(),
+		GoMain:      f.goMain.Value(),
+		VersionName: f.version.Value(),
+		VersionCode: f.code.Value(),
+	})
 	return cfg, baseDir, nil
+}
+
+type buildAndroidCmd struct {
+	hostFlags
+}
+
+func (buildAndroidCmd) Description() string {
+	return "JIT Android host, cross-compile the Go app (GOOS=android), and assemble a debug APK. Runs icon generation when the tree is incomplete. Use --go-only to stop after jniLibs."
+}
+
+func (c *buildAndroidCmd) Run(ctx context.Context) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	cfg, baseDir, err := c.load(cwd)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(cfg.PackageID) == "" {
+		return fmt.Errorf("%w: set package_id in %s or pass --id", ErrMissingPackageID, apk.ConfigFileName)
+	}
+	iconSrc := resolveIconSource(cwd, c.icon.Value(), baseDir, cfg.Icon)
+	iconOut := resolveIconOutput(cwd, c.output.Value())
+	outAPK := strings.TrimSpace(c.out.Value())
+	if outAPK == "" && !c.goOnly.Value() {
+		outAPK = apk.DefaultOutAPK(cfg.PackageID, cwd)
+	}
+	return runIconsThen(ctx, iconThen{src: iconSrc, out: iconOut, refresh: c.refresh.Value(), name: "android"}, func(iconRoot string) error {
+		result, err := apk.Build(apk.BuildOptions{
+			Config:      cfg,
+			BaseDir:     baseDir,
+			WorkDir:     c.workDir.Value(),
+			KeepWorkDir: c.keepWorkDir.Value() || c.workDir.Value() != "",
+			OutAPK:      outAPK,
+			GoOnly:      c.goOnly.Value(),
+			IconRoot:    iconRoot,
+			Stdout:      os.Stdout,
+			Stderr:      os.Stderr,
+		})
+		if err != nil {
+			return err
+		}
+		if c.goOnly.Value() {
+			if _, err := fmt.Fprintf(os.Stdout, "go libs:\n"); err != nil {
+				return err
+			}
+			for _, p := range result.JNILibs {
+				if _, err := fmt.Fprintf(os.Stdout, "  %s\n", p); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintf(os.Stdout, "work dir: %s\n", result.WorkDir)
+			return err
+		}
+		_, err = fmt.Fprintf(os.Stdout, "ok %s\n", result.APKPath)
+		return err
+	})
 }

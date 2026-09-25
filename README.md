@@ -71,7 +71,7 @@ Needs a local orvalho checkout (see `examples/astro/go.mod` `replace`). Details:
 
 ## CLI (`cmd/eletrocromo`)
 
-Cobra tooling binary (separate from the importable library):
+Packaging binary (separate from the importable library):
 
 ```bash
 go run ./cmd/eletrocromo --help
