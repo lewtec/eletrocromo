@@ -104,7 +104,7 @@ Wire paths into GoReleaser yourself (`before.hooks`, Pro `app_bundles.icon`, nFP
 
 ### Release
 
-Self-contained binaries (`CGO_ENABLED=0`) via [GoReleaser](https://goreleaser.com/).
+Binaries via [GoReleaser](https://goreleaser.com/).
 GitHub Releases only from **Actions → Autorelease → Run workflow** (`workflow_dispatch`).
 Push/`schedule` on `main` run CI only.
 
@@ -149,7 +149,7 @@ go run ./cmd/eletrocromo build --goos android examples/counter/eletrocromo.json 
 mise run android:run examples/counter/eletrocromo.json
 ```
 
-Default ABI is **arm64-v8a** only (pure Go / `CGO_ENABLED=0`; other ABIs need
+Default ABI is **arm64-v8a** (other ABIs need
 an NDK). Full APK also needs **JDK 17+**, **Android SDK** (`ANDROID_HOME`), and
 **Gradle 8.9+** on `PATH`. Without the SDK:
 
@@ -185,7 +185,7 @@ mise run linux:run examples/counter/eletrocromo.json
 mise run windows:run examples/counter/eletrocromo.json
 ```
 
-`build` and `run` take `eletrocromo.json`. The target is `--goos` and `--arch`, or this machine when those are omitted. Do not set `GOOS` on `go run`: that compiles the CLI itself for that OS, and `ios/arm64` will not link without cgo. `run` launches: `open` on darwin, Simulator on ios, adb on android, and the binary itself when linux or windows matches the host. No custom icon uses the atom mark. The Windows exe stores it in the PE resources. The Linux binary embeds the 256px PNG. The child `go build` inherits `CGO_ENABLED`.
+`build` and `run` take `eletrocromo.json`. The target is `--goos` and `--arch`, or this machine when those are omitted. Do not set `GOOS` on `go run`: that compiles the CLI itself for that OS, and `ios/arm64` will not link without cgo. `run` launches: `open` on darwin, Simulator on ios, adb on android, and the binary itself when linux or windows matches the host. No custom icon uses the atom mark. The Windows exe stores it in the PE resources. The Linux binary embeds the 256px PNG. 
 
 The `.app` is unsigned Debug. First open: right-click → Open. Off-loopback
 http(s) links open in the default browser. Packaging lives in `internal/gen/mac/`.

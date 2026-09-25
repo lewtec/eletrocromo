@@ -12,8 +12,6 @@ builds:
   - id: eletrocromo
     binary: eletrocromo
     main: ./cmd/eletrocromo
-    env:
-      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
@@ -33,8 +31,6 @@ builds:
   # Android APKs and macOS/iOS .app zips are attached by Autorelease, not here.
   - id: example-basic
     <<: &example-build
-      env:
-        - CGO_ENABLED=0
       goos:
         - linux
         - darwin
@@ -129,7 +125,7 @@ release:
 
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
 
-    Self-contained binaries (`CGO_ENABLED=0`). Install example:
+    Install example:
 
     ```bash
     # Linux x86_64

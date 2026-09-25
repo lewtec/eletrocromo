@@ -389,7 +389,7 @@ Same wrapper idea as the APK. Same `eletrocromo.json`. Packaging tricks from **r
 | `version_name` | `CFBundleShortVersionString` |
 | `version_code` | `CFBundleVersion` |
 | `icon` / `--icon` | Existing icon pipeline; copy `macos/icon.icns` into the bundle |
-| `go_main` | `CGO_ENABLED=0` darwin binary for the **host arch** |
+| `go_main` | darwin binary for the **host arch** |
 | Default `--out` | `dist/<app_name>.app` |
 | Flags | Same family as android: `--config`, `--out`, `--workdir`, `--go-only`, `--icon`, `--refresh-icons`, identity/version overrides |
 | Full `.app` | Mac with **Xcode** (`xcodegen` + `xcodebuild`) |
@@ -499,7 +499,6 @@ Resolved by engineering when building, not by re-litigating product meaning:
 - Exact PNG/ICO/ICNS size lists and Android density set
 - Which workspaced catalog tool names back SVG/ICO/ICNS conversion
 - Precise “outputs missing” checklist for skip-vs-generate
-- Whether `cmd/eletrocromo` stays `CGO_ENABLED=0` while shelling to external converters
 - Module path/version pin for subprocess workspaced tool ensure
 - AppKit vs SwiftUI for the WKWebView shell (dumb splash + WebView, not rterm chrome)
 - Path of the Go child inside the `.app` (`Contents/MacOS` vs `Helpers`)
