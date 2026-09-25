@@ -30,7 +30,6 @@ func TestBuildMacOS_GoOnly_Counter(t *testing.T) {
 	if _, err := os.Stat(counter); err != nil {
 		t.Skip(err)
 	}
-	t.Setenv("GOOS", "darwin")
 	work := t.TempDir()
 	iconsOut := filepath.Join(t.TempDir(), "icons")
 	var runErr error
@@ -38,7 +37,7 @@ func TestBuildMacOS_GoOnly_Counter(t *testing.T) {
 	errText := test.Stderr(t, func() {
 		buf = test.Stdout(t, func() {
 			runErr = run(t.Context(), []string{
-				"build", counter,
+				"build", "--goos", "darwin", counter,
 				"--go-only",
 				"--workdir", work,
 				"--output", iconsOut,

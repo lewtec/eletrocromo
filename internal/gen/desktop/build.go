@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/lewtec/eletrocromo/internal/gen/goenv"
 	"github.com/lewtec/eletrocromo/internal/winres"
 )
 
@@ -130,7 +131,7 @@ func Build(ctx context.Context, opts Options) error {
 	}
 	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir = mod
-	cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+arch, "CGO_ENABLED=0")
+	cmd.Env = goenv.Merge(os.Environ(), "GOOS="+goos, "GOARCH="+arch)
 	var errBuf bytes.Buffer
 	cmd.Stdout = stdout
 	cmd.Stderr = io.MultiWriter(stderr, &errBuf)

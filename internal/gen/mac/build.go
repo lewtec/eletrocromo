@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lewtec/eletrocromo/internal/gen/common"
+	"github.com/lewtec/eletrocromo/internal/gen/goenv"
 	"github.com/lewtec/eletrocromo/internal/icons"
 	"github.com/lewtec/eletrocromo/internal/version"
 )
@@ -207,11 +208,7 @@ func buildGoHelper(dest, goMainDir, goarch string, stamp version.Info, stdout, s
 	}
 	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", stamp.GoBuildLdflags(), "-o", dest, ".")
 	cmd.Dir = goMainDir
-	cmd.Env = append(os.Environ(),
-		"CGO_ENABLED=0",
-		"GOOS=darwin",
-		"GOARCH="+goarch,
-	)
+	cmd.Env = goenv.Merge(os.Environ(), "GOOS=darwin", "GOARCH="+goarch)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
