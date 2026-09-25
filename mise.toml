@@ -29,20 +29,6 @@ ci = { depends = ["lint", "test", "check"] }
 # Local binary (same package as releases).
 "build:cli" = "go build -o bin/eletrocromo ./cmd/eletrocromo"
 
-# Build multiarch debug APK for the counter dogfood (needs ANDROID_HOME + JDK + Gradle).
-# Falls back to --go-only host tree when SDK is missing is not automatic; use apk:counter:go.
-"apk:counter" = """
-go run ./cmd/eletrocromo build android \
-  --config examples/counter/eletrocromo.json \
-  --out dist/counter-debug.apk \
-  --workdir dist/android-counter
-"""
-"apk:counter:go" = """
-go run ./cmd/eletrocromo build android \
-  --config examples/counter/eletrocromo.json \
-  --go-only \
-  --workdir dist/android-counter
-"""
 "macos:counter" = """
 go run ./cmd/eletrocromo build macos \
   --config examples/counter/eletrocromo.json \
@@ -55,26 +41,6 @@ go run ./cmd/eletrocromo build macos \
   --go-only \
   --workdir dist/macos-counter
 """
-"ios:counter" = """
-go run ./cmd/eletrocromo build ios \
-  --config examples/counter/eletrocromo.json \
-  --out dist/Counter.app \
-  --workdir dist/ios-counter
-"""
-"ios:counter:go" = """
-go run ./cmd/eletrocromo build ios \
-  --config examples/counter/eletrocromo.json \
-  --go-only \
-  --workdir dist/ios-counter
-"""
-"ios:inbox" = """
-go run ./cmd/eletrocromo build ios \
-  --config examples/inbox/eletrocromo.json \
-  --out dist/Inbox.app \
-  --workdir dist/ios-inbox
-"""
-"ios:inbox:sim" = "bash examples/inbox/sim.sh sim"
-"ios:inbox:ping" = "bash examples/inbox/sim.sh ping"
 "icons" = "go run ./cmd/eletrocromo build icons --refresh-icons"
 
 # Dogfood host resolve + Helium --app (Ctrl+C to quit).
@@ -89,25 +55,23 @@ go run ./cmd/eletrocromo build ios \
 
 # Release extras: desktop archives come from GoReleaser; these tasks build
 # the packaging targets (APK / .app) and are invoked by Autorelease only.
-[tasks."apk:inbox"]
-description = "Inbox debug APK (mise java + android-sdk + gradle)"
-tools = { java = "temurin-17", android-sdk = "19.0", gradle = "8.9" }
+[tasks."ios:run"]
+description = "Build an iOS Simulator .app, install it, and launch it"
+usage = '''
+arg "<config>" help="Path to eletrocromo.json"
+'''
 run = '''
-yes | sdkmanager --licenses >/dev/null || true
-sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
-go run ./cmd/eletrocromo build android \
-  --config examples/inbox/eletrocromo.json \
-  --out dist/inbox-debug.apk \
-  --workdir dist/android-inbox
+bash scripts/mobile-run.sh ios "${usage_config}"
 '''
 
-[tasks."android:inbox"]
-description = "Install Inbox on the connected adb device and launch"
+[tasks."android:run"]
+description = "Build a debug APK, install it on the connected device, and launch it"
 tools = { java = "temurin-17", android-sdk = "19.0", gradle = "8.9" }
+usage = '''
+arg "<config>" help="Path to eletrocromo.json"
+'''
 run = '''
-mise run apk:inbox
-adb install -r dist/inbox-debug.apk
-adb shell am start -n br.tec.lew.eletrocromo.inbox/.MainActivity
+bash scripts/mobile-run.sh android "${usage_config}"
 '''
 
 [tasks."release:examples:android"]

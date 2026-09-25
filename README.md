@@ -148,7 +148,7 @@ go run ./cmd/eletrocromo build android \
   --config examples/counter/eletrocromo.json \
   --out dist/counter-debug.apk
 
-mise run apk:counter
+mise run android:run examples/counter/eletrocromo.json
 ```
 
 Default ABI is **arm64-v8a** only (pure Go / `CGO_ENABLED=0`; other ABIs need
@@ -211,7 +211,7 @@ go run ./cmd/eletrocromo build ios \
   --config examples/counter/eletrocromo.json \
   --out dist/Counter.app
 
-mise run ios:counter
+mise run ios:run examples/counter/eletrocromo.json
 ```
 
 Default SDK is `iphonesimulator`. Use `--sdk iphoneos` for a device archive.

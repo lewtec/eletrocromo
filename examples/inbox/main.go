@@ -1,8 +1,8 @@
 // Inbox demos eletrocromo url/files capabilities and AppDirs.
 //
 //	mise run example:inbox
-//	mise run ios:inbox:sim   # build, boot Simulator, install, ping
-//	mise run ios:inbox:ping  # openurl + drop a .md into Cache/open.jsonl
+//	mise run ios:run examples/inbox/eletrocromo.json
+//	bash examples/inbox/sim.sh ping  # openurl + drop a .md into Cache/open.jsonl
 package main
 
 import (
