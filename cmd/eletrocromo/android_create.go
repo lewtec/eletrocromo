@@ -21,7 +21,7 @@ type androidCreateCmd struct {
 }
 
 func (androidCreateCmd) Description() string {
-	return "Generate an Android WebView host project. Not the happy path; prefer \"eletrocromo build android\"."
+	return "Generate an Android WebView host project. Not the happy path; prefer \"GOOS=android eletrocromo build\"."
 }
 
 func (c *androidCreateCmd) Run(context.Context) error {

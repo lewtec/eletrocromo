@@ -7,5 +7,5 @@ type androidCmd struct {
 }
 
 func (androidCmd) Description() string {
-	return "Legacy Android commands. Prefer \"eletrocromo build android\" and \"eletrocromo build icons\"."
+	return "Legacy Android commands. Prefer \"GOOS=android eletrocromo build\" and \"eletrocromo icons\"."
 }

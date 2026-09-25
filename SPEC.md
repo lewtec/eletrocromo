@@ -84,9 +84,9 @@ Runtime library and packaging CLI share a repo but **different dependency rules*
 │  build icons  ──► dist/icons/** + manifest.json             │
 │       ▲                                                     │
 │       │ missing / --refresh-icons                           │
-│  build android ──► JIT Gradle host + jniLibs + APK          │
-│  build macos   ──► JIT XcodeGen host + darwin Go + .app     │
-│  build ios     ──► JIT XcodeGen host + ios c-archive + .app │
+│  GOOS=android build ──► JIT Gradle host + jniLibs + APK     │
+│  GOOS=darwin build  ──► JIT XcodeGen host + darwin Go + .app│
+│  GOOS=ios build     ──► JIT XcodeGen host + ios c-archive   │
 │       │            (icns / mipmaps from icon tree)          │
 │       └── taskgroup orchestration (lewkit/x/taskgroup)      │
 │                                                             │
@@ -346,14 +346,12 @@ dist/icons/
 ### CLI shape (`cmd/eletrocromo`)
 
 ```text
-eletrocromo build              → error; list targets (icons, android, macos, …)
-eletrocromo build icons        → write the icon tree
-eletrocromo build android      → JIT scaffold + cross-compile Go + APK;
-                                 runs icons first if outputs missing
-eletrocromo build macos        → JIT XcodeGen + Swift host + darwin Go + .app;
-                                 runs icons first if macos/icon.icns is missing
-eletrocromo build ios          → JIT XcodeGen + UIKit host + GOOS=ios c-archive + .app;
-                                 scaffold (not grilled); READY file only; Mac + Xcode
+eletrocromo icons              → write the icon tree
+eletrocromo build <json>       → target follows GOOS/GOARCH (host by default)
+GOOS=android build <json>      → JIT scaffold + cross-compile Go + APK
+GOOS=darwin build <json>       → JIT XcodeGen + Swift host + darwin Go + .app
+GOOS=ios build <json>          → JIT XcodeGen + UIKit host + c-archive + .app
+eletrocromo run <json>         → build, then launch for that GOOS
 ```
 
 | Flag / behavior | Rule |

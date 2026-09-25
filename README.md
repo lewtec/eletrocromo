@@ -77,9 +77,9 @@ Packaging binary (separate from the importable library):
 go run ./cmd/eletrocromo --help
 go run ./cmd/eletrocromo version
 go run ./cmd/eletrocromo build icons          # → dist/icons (default mark or config icon)
-go run ./cmd/eletrocromo build android       # JIT APK; generates icons if missing
-go run ./cmd/eletrocromo build macos         # JIT unsigned Debug .app (Mac + Xcode)
-go run ./cmd/eletrocromo build ios           # JIT Debug .app (Mac + Xcode iOS SDK)
+go run ./cmd/eletrocromo build examples/counter/eletrocromo.json
+GOOS=android go run ./cmd/eletrocromo build examples/counter/eletrocromo.json
+GOOS=ios go run ./cmd/eletrocromo run examples/counter/eletrocromo.json
 # or: mise run build:cli && ./bin/eletrocromo version
 ```
 
@@ -140,12 +140,10 @@ cross-compiles multiarch Go (`GOOS=android`), and runs Gradle:
 ```bash
 # from the app module:
 cd examples/counter
-go run ../../cmd/eletrocromo build android
-# → dist/icons + dist/counter-debug.apk (package id from eletrocromo.json)
+GOOS=android go run ../../cmd/eletrocromo build eletrocromo.json
 
 # from repo root:
-go run ./cmd/eletrocromo build android \
-  --config examples/counter/eletrocromo.json \
+GOOS=android go run ./cmd/eletrocromo build examples/counter/eletrocromo.json \
   --out dist/counter-debug.apk
 
 mise run android:run examples/counter/eletrocromo.json
@@ -156,11 +154,11 @@ an NDK). Full APK also needs **JDK 17+**, **Android SDK** (`ANDROID_HOME`), and
 **Gradle 8.9+** on `PATH`. Without the SDK:
 
 ```bash
-go run ./cmd/eletrocromo build android --config examples/counter/eletrocromo.json --go-only --workdir dist/android-counter
+GOOS=android go run ./cmd/eletrocromo build examples/counter/eletrocromo.json --go-only --workdir dist/android-counter
 ```
 
 Icons are generated when missing (`--refresh-icons` to force). Legacy
-`android build` / `android create` still work; prefer `build android`. Runtime:
+`android build` / `android create` still work; prefer `GOOS=android eletrocromo build`. Runtime:
 the service sets `ELETROCROMO_NO_UI=1` and loads the `ELETROCROMO_READY` URL in
 WebView. Packaging lives in `internal/gen/apk/` + `internal/icons/` +
 `cmd/eletrocromo` (not in the core library import path for apps).
@@ -171,8 +169,7 @@ Same config and handshake as the APK. The host is its own WKWebView shell and ru
 Full `.app` needs **Xcode** and **xcodegen** on a Mac. Without them:
 
 ```bash
-go run ./cmd/eletrocromo build macos \
-  --config examples/counter/eletrocromo.json \
+GOOS=darwin go run ./cmd/eletrocromo build examples/counter/eletrocromo.json \
   --go-only \
   --workdir dist/macos-counter
 ```
@@ -180,8 +177,7 @@ go run ./cmd/eletrocromo build macos \
 On a Mac with Xcode:
 
 ```bash
-go run ./cmd/eletrocromo build macos \
-  --config examples/counter/eletrocromo.json \
+GOOS=darwin go run ./cmd/eletrocromo build examples/counter/eletrocromo.json \
   --out dist/Counter.app
 
 mise run mac:run examples/counter/eletrocromo.json
@@ -189,7 +185,7 @@ mise run linux:run examples/counter/eletrocromo.json
 mise run windows:run examples/counter/eletrocromo.json
 ```
 
-`linux:run` and `windows:run` call `eletrocromo build linux` and `build windows`. Those set `GOOS` and `GOARCH` with `CGO_ENABLED=0`. `GOARCH` defaults to this machine. The binary starts only when the host matches. No custom icon uses the atom mark. The Windows exe stores it in the PE resources. The Linux binary embeds the 256px PNG. Neither writes into the app module.
+`build` and `run` take `eletrocromo.json` and follow `GOOS`/`GOARCH` (this machine by default). `run` launches: `open` on darwin, Simulator on ios, adb on android, and the binary itself when linux or windows matches the host. No custom icon uses the atom mark. The Windows exe stores it in the PE resources. The Linux binary embeds the 256px PNG.
 
 The `.app` is unsigned Debug. First open: right-click → Open. Off-loopback
 http(s) links open in the default browser. Packaging lives in `internal/gen/mac/`.
@@ -202,8 +198,7 @@ UIKit WKWebView host. Full `.app` needs **Xcode** (iOS SDK) and **xcodegen**
 on a Mac. Launch needs an **iOS Simulator runtime** (or a signed device).
 
 ```bash
-go run ./cmd/eletrocromo build ios \
-  --config examples/counter/eletrocromo.json \
+GOOS=ios go run ./cmd/eletrocromo build examples/counter/eletrocromo.json \
   --go-only \
   --workdir dist/ios-counter
 ```
@@ -211,9 +206,8 @@ go run ./cmd/eletrocromo build ios \
 On a Mac with Xcode:
 
 ```bash
-go run ./cmd/eletrocromo build ios \
-  --config examples/counter/eletrocromo.json \
-  --out dist/Counter.app
+GOOS=ios go run ./cmd/eletrocromo build examples/counter/eletrocromo.json \
+  --out dist/Counter-ios.app
 
 mise run ios:run examples/counter/eletrocromo.json
 ```

@@ -33,7 +33,7 @@ func TestBuild_BareErrors(t *testing.T) {
 		})
 	})
 	require.Error(t, runErr)
-	require.ErrorIs(t, runErr, ErrMissingBuildTarget)
+	require.ErrorIs(t, runErr, errConfigRequired)
 }
 
 func TestBuildIcons_Default(t *testing.T) {
@@ -42,7 +42,7 @@ func TestBuildIcons_Default(t *testing.T) {
 	var out string
 	errText := test.Stderr(t, func() {
 		out = test.Stdout(t, func() {
-			runErr = run(t.Context(), []string{"build", "icons", "--output", filepath.Join(dir, "icons"), "--refresh-icons"})
+			runErr = run(t.Context(), []string{"icons", "--output", filepath.Join(dir, "icons"), "--refresh-icons"})
 		})
 	})
 	require.NoError(t, runErr, out+errText)

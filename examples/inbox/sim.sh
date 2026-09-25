@@ -12,7 +12,7 @@ SCHEME="eletrocromo-inbox"
 cmd="${1:-sim}"
 case "$cmd" in
 build)
-	bash "$ROOT/scripts/mobile-run.sh" ios examples/inbox/eletrocromo.json
+	GOOS=ios go run "$ROOT/cmd/eletrocromo" run examples/inbox/eletrocromo.json
 	;;
 ping)
 	xcrun simctl openurl booted "${SCHEME}://from-simctl"

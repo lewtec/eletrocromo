@@ -49,7 +49,7 @@ usage = '''
 arg "<config>" help="Path to eletrocromo.json"
 '''
 run = '''
-bash scripts/mobile-run.sh linux "${usage_config}"
+GOOS=linux go run ./cmd/eletrocromo run "${usage_config}"
 '''
 
 [tasks."windows:run"]
@@ -58,7 +58,7 @@ usage = '''
 arg "<config>" help="Path to eletrocromo.json"
 '''
 run = '''
-bash scripts/mobile-run.sh windows "${usage_config}"
+GOOS=windows go run ./cmd/eletrocromo run "${usage_config}"
 '''
 
 [tasks."mac:run"]
@@ -67,7 +67,7 @@ usage = '''
 arg "<config>" help="Path to eletrocromo.json"
 '''
 run = '''
-bash scripts/mobile-run.sh mac "${usage_config}"
+GOOS=darwin go run ./cmd/eletrocromo run "${usage_config}"
 '''
 
 [tasks."ios:run"]
@@ -76,7 +76,7 @@ usage = '''
 arg "<config>" help="Path to eletrocromo.json"
 '''
 run = '''
-bash scripts/mobile-run.sh ios "${usage_config}"
+GOOS=ios go run ./cmd/eletrocromo run "${usage_config}"
 '''
 
 [tasks."android:run"]
@@ -86,7 +86,7 @@ usage = '''
 arg "<config>" help="Path to eletrocromo.json"
 '''
 run = '''
-bash scripts/mobile-run.sh android "${usage_config}"
+GOOS=android go run ./cmd/eletrocromo run "${usage_config}"
 '''
 
 [tasks."release:examples:android"]
@@ -95,8 +95,8 @@ tools = { gradle = "8.9" }
 run = '''
 mkdir -p dist/examples
 for name in basic counter ticker astro; do
-  go run ./cmd/eletrocromo build android \
-    --config "examples/${name}/eletrocromo.json" \
+  GOOS=android go run ./cmd/eletrocromo build \
+    "examples/${name}/eletrocromo.json" \
     --out "dist/examples/example-${name}-debug.apk" \
     --workdir "dist/android-${name}"
 done
@@ -111,16 +111,16 @@ if [ "$(uname -s)" != "Darwin" ]; then
 fi
 mkdir -p dist/examples
 for name in basic counter ticker astro; do
-  go run ./cmd/eletrocromo build macos \
-    --config "examples/${name}/eletrocromo.json" \
+  GOOS=darwin go run ./cmd/eletrocromo build \
+    "examples/${name}/eletrocromo.json" \
     --out "dist/examples/example-${name}.app" \
     --workdir "dist/macos-${name}"
   ditto -c -k --keepParent \
     "dist/examples/example-${name}.app" \
     "dist/examples/example-${name}_macOS.app.zip"
 
-  go run ./cmd/eletrocromo build ios \
-    --config "examples/${name}/eletrocromo.json" \
+  GOOS=ios go run ./cmd/eletrocromo build \
+    "examples/${name}/eletrocromo.json" \
     --out "dist/examples/example-${name}-ios.app" \
     --workdir "dist/ios-${name}"
   ditto -c -k --keepParent \
