@@ -3,10 +3,11 @@ package mac
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lewtec/eletrocromo/internal/gen/common"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreate_WritesHost(t *testing.T) {
@@ -19,9 +20,7 @@ func TestCreate_WritesHost(t *testing.T) {
 			GoMain:    ".",
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	mustExist := []string{
 		"eletrocromo.json",
@@ -33,64 +32,35 @@ func TestCreate_WritesHost(t *testing.T) {
 		"Sources/MainWindow.swift",
 	}
 	for _, rel := range mustExist {
-		if _, err := os.Stat(filepath.Join(out, rel)); err != nil {
-			t.Errorf("missing %s: %v", rel, err)
-		}
+		_, err := os.Stat(filepath.Join(out, rel))
+		assert.NoError(t, err, "missing %s", rel)
 	}
 
 	yml, err := os.ReadFile(filepath.Join(out, "project.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	s := string(yml)
-	if !strings.Contains(s, "PRODUCT_BUNDLE_IDENTIFIER: br.tec.lew.counter") {
-		t.Fatalf("bundle id missing:\n%s", s)
-	}
-	if !strings.Contains(s, "ENABLE_APP_SANDBOX: NO") {
-		t.Fatalf("sandbox not off:\n%s", s)
-	}
+	assert.Contains(t, s, "PRODUCT_BUNDLE_IDENTIFIER: br.tec.lew.counter")
+	assert.Contains(t, s, "ENABLE_APP_SANDBOX: NO")
 
 	plist, err := os.ReadFile(filepath.Join(out, "Info.plist"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ps := string(plist)
-	if !strings.Contains(ps, "br.tec.lew.counter") {
-		t.Fatalf("plist id:\n%s", ps)
-	}
-	if !strings.Contains(ps, "NSAllowsLocalNetworking") {
-		t.Fatalf("plist ATS:\n%s", ps)
-	}
+	assert.Contains(t, ps, "br.tec.lew.counter")
+	assert.Contains(t, ps, "NSAllowsLocalNetworking")
 
 	jsonb, err := os.ReadFile(filepath.Join(out, "eletrocromo.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(jsonb), `"package_id": "br.tec.lew.counter"`) {
-		t.Fatalf("json: %s", jsonb)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(jsonb), `"package_id": "br.tec.lew.counter"`)
 
 	swift, err := os.ReadFile(filepath.Join(out, "Sources/ServerProcess.swift"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(swift), "ELETROCROMO_NO_UI") {
-		t.Fatalf("helper env missing:\n%s", swift)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(swift), "ELETROCROMO_NO_UI")
 
 	ui, err := os.ReadFile(filepath.Join(out, "Sources/MainWindow.swift"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(ui), "NSTitlebarAccessoryViewController") {
-		t.Fatalf("titlebar reload missing:\n%s", ui)
-	}
-	if !strings.Contains(string(ui), "arrow.clockwise") {
-		t.Fatalf("reload symbol missing:\n%s", ui)
-	}
-	if !strings.Contains(string(ui), "openExternal") {
-		t.Fatalf("custom scheme open missing:\n%s", ui)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(ui), "NSTitlebarAccessoryViewController")
+	assert.Contains(t, string(ui), "arrow.clockwise")
+	assert.Contains(t, string(ui), "openExternal")
 }
 
 func TestCreate_CapabilitiesPlist(t *testing.T) {
@@ -107,28 +77,18 @@ func TestCreate_CapabilitiesPlist(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	plist, err := os.ReadFile(filepath.Join(out, "Info.plist"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ps := string(plist)
-	if !strings.Contains(ps, "CFBundleURLTypes") || !strings.Contains(ps, "myapp") {
-		t.Fatalf("url types:\n%s", ps)
-	}
-	if !strings.Contains(ps, "CFBundleDocumentTypes") {
-		t.Fatalf("docs:\n%s", ps)
-	}
-	if _, err := os.Stat(filepath.Join(out, "Sources/OpenDrop.swift")); err != nil {
-		t.Fatal(err)
-	}
+	assert.Contains(t, ps, "CFBundleURLTypes")
+	assert.Contains(t, ps, "myapp")
+	assert.Contains(t, ps, "CFBundleDocumentTypes")
+	_, err = os.Stat(filepath.Join(out, "Sources/OpenDrop.swift"))
+	require.NoError(t, err)
 }
 
 func TestCreate_RejectsBadID(t *testing.T) {
 	err := Create(Options{OutDir: t.TempDir(), Config: Config{PackageID: "Not an id"}})
-	if err == nil {
-		t.Fatal("expected error")
-	}
+	require.Error(t, err)
 }

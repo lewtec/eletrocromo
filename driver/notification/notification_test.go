@@ -5,6 +5,7 @@ import (
 
 	"github.com/lewtec/eletrocromo/driver/notification"
 	_ "github.com/lewtec/eletrocromo/driver/notification/discard"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNotify_Discard(t *testing.T) {
@@ -12,7 +13,5 @@ func TestNotify_Discard(t *testing.T) {
 		Title:   "hi",
 		Message: "there",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 }

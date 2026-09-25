@@ -1,7 +1,6 @@
 package dirs_test
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +8,8 @@ import (
 
 	"github.com/lewtec/eletrocromo/driver/dirs"
 	_ "github.com/lewtec/eletrocromo/driver/dirs/os"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolve_InboxUnderCache(t *testing.T) {
@@ -18,27 +19,18 @@ func TestResolve_InboxUnderCache(t *testing.T) {
 	t.Setenv("ELETROCROMO_CONFIG_DIR", filepath.Join(root, "config"))
 
 	got, err := dirs.Resolve(t.Context(), "br.tec.lew.counter")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	wantInbox := filepath.Join(root, "cache", "inbox")
-	if got.Inbox != wantInbox {
-		t.Fatalf("Inbox = %q; want %q", got.Inbox, wantInbox)
-	}
-	if !strings.HasPrefix(got.Inbox, got.Cache+string(filepath.Separator)) && got.Inbox != filepath.Join(got.Cache, "inbox") {
-		t.Fatalf("Inbox %q is not under Cache %q", got.Inbox, got.Cache)
-	}
+	assert.Equal(t, wantInbox, got.Inbox)
+	assert.True(t, strings.HasPrefix(got.Inbox, got.Cache+string(filepath.Separator)) || got.Inbox == filepath.Join(got.Cache, "inbox"))
 	for _, dir := range []string{got.Data, got.Cache, got.Config, got.Inbox} {
 		st, err := os.Stat(dir)
-		if err != nil || !st.IsDir() {
-			t.Fatalf("dir %q: %v", dir, err)
-		}
+		require.NoError(t, err)
+		assert.True(t, st.IsDir())
 	}
 }
 
 func TestResolve_RejectsBadAppID(t *testing.T) {
 	_, err := dirs.Resolve(t.Context(), "../evil")
-	if !errors.Is(err, dirs.ErrInvalidAppID) {
-		t.Fatalf("err = %v", err)
-	}
+	require.ErrorIs(t, err, dirs.ErrInvalidAppID)
 }

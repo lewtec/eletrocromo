@@ -3,39 +3,32 @@ package ios
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lewtec/eletrocromo/internal/gen/common"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExcludedArch(t *testing.T) {
 	t.Parallel()
-	if got := excludedArch("arm64"); got != "x86_64" {
-		t.Fatalf("arm64: got %q", got)
-	}
-	if got := excludedArch("x86_64"); got != "arm64" {
-		t.Fatalf("x86_64: got %q", got)
-	}
+	assert.Equal(t, "x86_64", excludedArch("arm64"))
+	assert.Equal(t, "arm64", excludedArch("x86_64"))
 }
 
 func TestNormalizeSDK(t *testing.T) {
 	t.Parallel()
 	got, err := normalizeSDK("")
-	if err != nil || got != SDKSimulator {
-		t.Fatalf("empty: got %q %v", got, err)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SDKSimulator, got)
 	got, err = normalizeSDK("simulator")
-	if err != nil || got != SDKSimulator {
-		t.Fatalf("simulator: got %q %v", got, err)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SDKSimulator, got)
 	got, err = normalizeSDK("device")
-	if err != nil || got != SDKDevice {
-		t.Fatalf("device: got %q %v", got, err)
-	}
-	if _, err := normalizeSDK("watchos"); err == nil {
-		t.Fatal("expected error for watchos")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, SDKDevice, got)
+	_, err = normalizeSDK("watchos")
+	require.Error(t, err)
 }
 
 func TestCreate_WritesHost(t *testing.T) {
@@ -48,9 +41,7 @@ func TestCreate_WritesHost(t *testing.T) {
 			GoMain:    ".",
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	mustExist := []string{
 		"eletrocromo.json",
@@ -66,149 +57,73 @@ func TestCreate_WritesHost(t *testing.T) {
 		"LaunchScreen.storyboard",
 	}
 	for _, rel := range mustExist {
-		if _, err := os.Stat(filepath.Join(out, rel)); err != nil {
-			t.Errorf("missing %s: %v", rel, err)
-		}
+		_, err := os.Stat(filepath.Join(out, rel))
+		assert.NoError(t, err, "missing %s", rel)
 	}
 
 	yml, err := os.ReadFile(filepath.Join(out, "project.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	s := string(yml)
-	if !strings.Contains(s, "PRODUCT_BUNDLE_IDENTIFIER: br.tec.lew.counter") {
-		t.Fatalf("bundle id missing:\n%s", s)
-	}
-	if !strings.Contains(s, "platform: iOS") {
-		t.Fatalf("platform missing:\n%s", s)
-	}
-	if !strings.Contains(s, "TARGETED_DEVICE_FAMILY: \"1,2\"") {
-		t.Fatalf("device family missing:\n%s", s)
-	}
-	if !strings.Contains(s, "SWIFT_OBJC_BRIDGING_HEADER") {
-		t.Fatalf("bridging header missing:\n%s", s)
-	}
-	if !strings.Contains(s, "ENABLE_DEBUG_DYLIB: NO") {
-		t.Fatalf("debug dylib not off:\n%s", s)
-	}
-	if !strings.Contains(s, "LaunchScreen.storyboard") {
-		t.Fatalf("launch storyboard missing from project:\n%s", s)
-	}
-	if strings.Contains(s, "type: app-extension") {
-		t.Fatalf("share extension should be off without files:\n%s", s)
-	}
-	if !strings.Contains(s, "CODE_SIGNING_ALLOWED: YES") {
-		t.Fatalf("ad-hoc signing required for app groups:\n%s", s)
-	}
+	assert.Contains(t, s, "PRODUCT_BUNDLE_IDENTIFIER: br.tec.lew.counter")
+	assert.Contains(t, s, "platform: iOS")
+	assert.Contains(t, s, "TARGETED_DEVICE_FAMILY: \"1,2\"")
+	assert.Contains(t, s, "SWIFT_OBJC_BRIDGING_HEADER")
+	assert.Contains(t, s, "ENABLE_DEBUG_DYLIB: NO")
+	assert.Contains(t, s, "LaunchScreen.storyboard")
+	assert.NotContains(t, s, "type: app-extension")
+	assert.Contains(t, s, "CODE_SIGNING_ALLOWED: YES")
 
 	plist, err := os.ReadFile(filepath.Join(out, "Info.plist"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ps := string(plist)
-	if !strings.Contains(ps, "br.tec.lew.counter") {
-		t.Fatalf("plist id:\n%s", ps)
-	}
-	if !strings.Contains(ps, "NSAllowsLocalNetworking") {
-		t.Fatalf("plist ATS:\n%s", ps)
-	}
-	if !strings.Contains(ps, "LSRequiresIPhoneOS") {
-		t.Fatalf("plist iPhoneOS:\n%s", ps)
-	}
-	if !strings.Contains(ps, "UILaunchStoryboardName") || !strings.Contains(ps, "LaunchScreen") {
-		t.Fatalf("plist launch storyboard:\n%s", ps)
-	}
-	if strings.Contains(ps, "UILaunchScreen") {
-		t.Fatalf("plist still uses UILaunchScreen (zooms 1x 1024px):\n%s", ps)
-	}
+	assert.Contains(t, ps, "br.tec.lew.counter")
+	assert.Contains(t, ps, "NSAllowsLocalNetworking")
+	assert.Contains(t, ps, "LSRequiresIPhoneOS")
+	assert.Contains(t, ps, "UILaunchStoryboardName")
+	assert.Contains(t, ps, "LaunchScreen")
+	assert.NotContains(t, ps, "UILaunchScreen")
 
 	story, err := os.ReadFile(filepath.Join(out, "LaunchScreen.storyboard"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ssb := string(story)
-	if !strings.Contains(ssb, `constant="120"`) || !strings.Contains(ssb, "SplashLogo") {
-		t.Fatalf("launch storyboard logo size:\n%s", ssb)
-	}
+	assert.Contains(t, ssb, `constant="120"`)
+	assert.Contains(t, ssb, "SplashLogo")
 
 	jsonb, err := os.ReadFile(filepath.Join(out, "eletrocromo.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(jsonb), `"package_id": "br.tec.lew.counter"`) {
-		t.Fatalf("json: %s", jsonb)
-	}
-	if !strings.Contains(string(jsonb), `"generator": "eletrocromo-ios"`) {
-		t.Fatalf("generator: %s", jsonb)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(jsonb), `"package_id": "br.tec.lew.counter"`)
+	assert.Contains(t, string(jsonb), `"generator": "eletrocromo-ios"`)
 
 	swift, err := os.ReadFile(filepath.Join(out, "Sources/ServerProcess.swift"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ss := string(swift)
-	if !strings.Contains(ss, "ELETROCROMO_READY") {
-		t.Fatalf("ready prefix missing:\n%s", ss)
-	}
-	if !strings.Contains(ss, "EletrocromoStart") {
-		t.Fatalf("c-archive entry missing:\n%s", ss)
-	}
-	if !strings.Contains(ss, "dirs.cache.path") {
-		t.Fatalf("start must pass cache dir into Go:\n%s", ss)
-	}
+	assert.Contains(t, ss, "ELETROCROMO_READY")
+	assert.Contains(t, ss, "EletrocromoStart")
+	assert.Contains(t, ss, "dirs.cache.path")
 
 	ui, err := os.ReadFile(filepath.Join(out, "Sources/RootViewController.swift"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	us := string(ui)
-	if !strings.Contains(us, "WKWebView") {
-		t.Fatalf("webview missing:\n%s", us)
-	}
-	if !strings.Contains(us, "UIRefreshControl") {
-		t.Fatalf("pull-to-refresh missing:\n%s", us)
-	}
-	if !strings.Contains(us, "SplashLogo") {
-		t.Fatalf("splash logo missing:\n%s", us)
-	}
-	if !strings.Contains(us, "Try again") {
-		t.Fatalf("android retry copy missing:\n%s", us)
-	}
-	if !strings.Contains(us, "openExternal") {
-		t.Fatalf("custom scheme open missing:\n%s", us)
-	}
-	if !strings.Contains(us, "revealIfStuck") {
-		t.Fatalf("stuck reveal missing:\n%s", us)
-	}
-	if strings.Contains(us, "UIBarButtonItem") || strings.Contains(us, "arrow.clockwise") {
-		t.Fatalf("navbar reload still present:\n%s", us)
-	}
-	if !strings.Contains(us, "UIApplication.shared.open") {
-		t.Fatalf("off-loopback open missing:\n%s", us)
-	}
+	assert.Contains(t, us, "WKWebView")
+	assert.Contains(t, us, "UIRefreshControl")
+	assert.Contains(t, us, "SplashLogo")
+	assert.Contains(t, us, "Try again")
+	assert.Contains(t, us, "openExternal")
+	assert.Contains(t, us, "revealIfStuck")
+	assert.NotContains(t, us, "UIBarButtonItem")
+	assert.NotContains(t, us, "arrow.clockwise")
+	assert.Contains(t, us, "UIApplication.shared.open")
 
 	delegate, err := os.ReadFile(filepath.Join(out, "Sources/AppDelegate.swift"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ds := string(delegate)
-	if strings.Contains(ds, "UINavigationController") {
-		t.Fatalf("nav controller still wrapping root:\n%s", ds)
-	}
-	if !strings.Contains(ds, "quietSplash") {
-		t.Fatalf("quiet splash missing:\n%s", ds)
-	}
-	if !strings.Contains(ds, "applicationDidBecomeActive") {
-		t.Fatalf("become-active drain missing:\n%s", ds)
-	}
+	assert.NotContains(t, ds, "UINavigationController")
+	assert.Contains(t, ds, "quietSplash")
+	assert.Contains(t, ds, "applicationDidBecomeActive")
 
 	hdr, err := os.ReadFile(filepath.Join(out, "Sources/eletrocromo-Bridging-Header.h"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(hdr), "libeletrocromo.h") {
-		t.Fatalf("header: %s", hdr)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(hdr), "libeletrocromo.h")
 }
 
 func TestCreate_CapabilitiesPlist(t *testing.T) {
@@ -225,87 +140,45 @@ func TestCreate_CapabilitiesPlist(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	plist, err := os.ReadFile(filepath.Join(out, "Info.plist"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ps := string(plist)
-	if !strings.Contains(ps, "CFBundleURLTypes") || !strings.Contains(ps, "myapp") {
-		t.Fatalf("url types:\n%s", ps)
-	}
-	if !strings.Contains(ps, "CFBundleDocumentTypes") {
-		t.Fatalf("docs:\n%s", ps)
-	}
-	if !strings.Contains(ps, "UTImportedTypeDeclarations") || !strings.Contains(ps, "LSHandlerRank") {
-		t.Fatalf("uti:\n%s", ps)
-	}
+	assert.Contains(t, ps, "CFBundleURLTypes")
+	assert.Contains(t, ps, "myapp")
+	assert.Contains(t, ps, "CFBundleDocumentTypes")
+	assert.Contains(t, ps, "UTImportedTypeDeclarations")
+	assert.Contains(t, ps, "LSHandlerRank")
 	yml, err := os.ReadFile(filepath.Join(out, "project.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(yml), "type: app-extension") {
-		t.Fatalf("share extension missing:\n%s", yml)
-	}
-	if _, err := os.Stat(filepath.Join(out, "ShareExtension/ShareViewController.swift")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(yml), "type: app-extension")
+	_, err = os.Stat(filepath.Join(out, "ShareExtension/ShareViewController.swift"))
+	require.NoError(t, err)
 	extPlist, err := os.ReadFile(filepath.Join(out, "ShareExtension/Info.plist"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(extPlist), "NSExtensionActivationSupportsImageWithMaxCount") {
-		t.Fatalf("image activation:\n%s", extPlist)
-	}
-	if _, err := os.Stat(filepath.Join(out, "Sources/OpenDrop.swift")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(extPlist), "NSExtensionActivationSupportsImageWithMaxCount")
+	_, err = os.Stat(filepath.Join(out, "Sources/OpenDrop.swift"))
+	require.NoError(t, err)
 	openDrop, err := os.ReadFile(filepath.Join(out, "Sources/OpenDrop.swift"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(openDrop), "adoptGroupLine") {
-		t.Fatalf("drain must copy group files into Cache/inbox:\n%s", openDrop)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(openDrop), "adoptGroupLine")
 	shareSrc, err := os.ReadFile(filepath.Join(out, "ShareExtension/ShareViewController.swift"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(shareSrc), "loadFileRepresentation") {
-		t.Fatalf("photos share needs loadFileRepresentation:\n%s", shareSrc)
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(shareSrc), "loadFileRepresentation")
 }
 
 func TestCreate_RejectsBadID(t *testing.T) {
 	err := Create(Options{OutDir: t.TempDir(), Config: Config{PackageID: "Not an id"}})
-	if err == nil {
-		t.Fatal("expected error")
-	}
+	require.Error(t, err)
 }
 
 func TestBridgeSource_ExportsStart(t *testing.T) {
 	t.Parallel()
-	if !strings.Contains(iosBridgeSource, "//export EletrocromoStart") {
-		t.Fatal("missing export")
-	}
-	if !strings.Contains(iosBridgeSource, "ELETROCROMO_NO_UI") {
-		t.Fatal("missing NO_UI")
-	}
-	if !strings.Contains(iosBridgeSource, "ELETROCROMO_READY_FILE") {
-		t.Fatal("missing READY_FILE")
-	}
-	if !strings.Contains(iosBridgeSource, "ELETROCROMO_CACHE_DIR") {
-		t.Fatal("missing CACHE_DIR")
-	}
-	if !strings.Contains(iosBridgeSource, "ELETROCROMO_DATA_DIR") {
-		t.Fatal("missing DATA_DIR")
-	}
-	if !strings.Contains(iosBridgeSource, "ELETROCROMO_CONFIG_DIR") {
-		t.Fatal("missing CONFIG_DIR")
-	}
-	if !strings.Contains(iosBridgeSource, "main()") {
-		t.Fatal("missing main() call")
-	}
+	assert.Contains(t, iosBridgeSource, "//export EletrocromoStart")
+	assert.Contains(t, iosBridgeSource, "ELETROCROMO_NO_UI")
+	assert.Contains(t, iosBridgeSource, "ELETROCROMO_READY_FILE")
+	assert.Contains(t, iosBridgeSource, "ELETROCROMO_CACHE_DIR")
+	assert.Contains(t, iosBridgeSource, "ELETROCROMO_DATA_DIR")
+	assert.Contains(t, iosBridgeSource, "ELETROCROMO_CONFIG_DIR")
+	assert.Contains(t, iosBridgeSource, "main()")
 }

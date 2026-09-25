@@ -7,6 +7,7 @@ replace github.com/lewtec/eletrocromo => ../..
 require (
 	github.com/lewtec/eletrocromo v0.0.0
 	github.com/lucasew/orvalho v0.0.0-20260720233020-b4936fd61914
+	github.com/stretchr/testify v1.12.1
 )
 
 require (
@@ -17,5 +18,6 @@ require (
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/lewtec/lewkit v0.0.0-20260924172916-363fac3090d3 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/text v0.42.0 // indirect
 )

@@ -1,8 +1,9 @@
 package eletrocromo
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNormalizeDNSServer(t *testing.T) {
@@ -30,9 +31,8 @@ func TestNormalizeDNSServer(t *testing.T) {
 	}
 	for _, tt := range cases {
 		got, ok := normalizeDNSServer(tt.in)
-		if ok != tt.wantOK || got != tt.want {
-			t.Errorf("normalizeDNSServer(%q) = %q, %v; want %q, %v", tt.in, got, ok, tt.want, tt.wantOK)
-		}
+		assert.Equal(t, tt.wantOK, ok, tt.in)
+		assert.Equal(t, tt.want, got, tt.in)
 	}
 }
 
@@ -40,14 +40,10 @@ func TestDNSServersFromEnv(t *testing.T) {
 	t.Setenv("ELETROCROMO_DNS", "8.8.8.8, 2001:4860:4860::8888, 127.0.0.1, 1.1.1.1:53")
 	got := dnsServersFromEnv()
 	want := []string{"8.8.8.8:53", "[2001:4860:4860::8888]:53", "1.1.1.1:53"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %v want %v", got, want)
-	}
+	assert.Equal(t, want, got)
 
 	t.Setenv("ELETROCROMO_DNS", "")
-	if dnsServersFromEnv() != nil {
-		t.Fatal("empty env should yield nil")
-	}
+	assert.Nil(t, dnsServersFromEnv())
 }
 
 func TestDNSDialNetworks(t *testing.T) {
@@ -60,9 +56,6 @@ func TestDNSDialNetworks(t *testing.T) {
 		{"dns.example:53", []string{"udp", "tcp"}},
 	}
 	for _, tt := range cases {
-		got := dnsDialNetworks(tt.server)
-		if !reflect.DeepEqual(got, tt.want) {
-			t.Errorf("dnsDialNetworks(%q) = %v want %v", tt.server, got, tt.want)
-		}
+		assert.Equal(t, tt.want, dnsDialNetworks(tt.server), tt.server)
 	}
 }

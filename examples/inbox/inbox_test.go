@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestInboxNameFromURL(t *testing.T) {
 	t.Parallel()
@@ -20,9 +24,7 @@ func TestInboxNameFromURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
 			t.Parallel()
-			if got := inboxNameFromURL(tt.in); got != tt.want {
-				t.Fatalf("inboxNameFromURL(%q)=%q want %q", tt.in, got, tt.want)
-			}
+			assert.Equal(t, tt.want, inboxNameFromURL(tt.in))
 		})
 	}
 }

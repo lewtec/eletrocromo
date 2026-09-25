@@ -2,11 +2,12 @@ package common
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
 	"github.com/lewtec/eletrocromo"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestApplyHostDefaults_FillsAppNameAndGoMain(t *testing.T) {
@@ -16,29 +17,18 @@ func TestApplyHostDefaults_FillsAppNameAndGoMain(t *testing.T) {
 		VersionName: "1.0.0",
 		VersionCode: 1,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.PackageID != "br.tec.lew.counter" {
-		t.Fatalf("PackageID = %q", got.PackageID)
-	}
-	if got.AppName != "counter" {
-		t.Fatalf("AppName = %q", got.AppName)
-	}
-	if got.GoMain != "." {
-		t.Fatalf("GoMain = %q", got.GoMain)
-	}
-	if got.VersionName != "1.0.0" || got.VersionCode != 1 {
-		t.Fatalf("version = %q / %d", got.VersionName, got.VersionCode)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "br.tec.lew.counter", got.PackageID)
+	assert.Equal(t, "counter", got.AppName)
+	assert.Equal(t, ".", got.GoMain)
+	assert.Equal(t, "1.0.0", got.VersionName)
+	assert.Equal(t, 1, got.VersionCode)
 }
 
 func TestApplyHostDefaults_RejectsBadPackageID(t *testing.T) {
 	t.Parallel()
 	_, err := ApplyHostDefaults(HostConfig{})
-	if !errors.Is(err, eletrocromo.ErrAppIDRequired) {
-		t.Fatalf("got %v", err)
-	}
+	require.ErrorIs(t, err, eletrocromo.ErrAppIDRequired)
 }
 
 func TestEncodeHostJSON(t *testing.T) {
@@ -51,26 +41,12 @@ func TestEncodeHostJSON(t *testing.T) {
 		GoMain:      ".",
 		Icon:        "icon.png",
 	}, "eletrocromo-ios")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasSuffix(string(raw), "\n") {
-		t.Fatal("missing trailing newline")
-	}
+	require.NoError(t, err)
+	assert.True(t, strings.HasSuffix(string(raw), "\n"))
 	var doc map[string]any
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatal(err)
-	}
-	if doc["schema_version"] != float64(1) {
-		t.Fatalf("schema_version = %v", doc["schema_version"])
-	}
-	if doc["generator"] != "eletrocromo-ios" {
-		t.Fatalf("generator = %v", doc["generator"])
-	}
-	if doc["package_id"] != "br.tec.lew.counter" {
-		t.Fatalf("package_id = %v", doc["package_id"])
-	}
-	if doc["icon"] != "icon.png" {
-		t.Fatalf("icon = %v", doc["icon"])
-	}
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	assert.Equal(t, float64(1), doc["schema_version"])
+	assert.Equal(t, "eletrocromo-ios", doc["generator"])
+	assert.Equal(t, "br.tec.lew.counter", doc["package_id"])
+	assert.Equal(t, "icon.png", doc["icon"])
 }

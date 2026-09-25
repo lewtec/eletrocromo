@@ -3,25 +3,28 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/lewtec/lewkit/x/test"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildMacOS_Help(t *testing.T) {
-	out, err := runCLI(t, "build", "macos", "--help")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out, "--go-only") {
-		t.Fatalf("help missing --go-only:\n%s", out)
-	}
+	var runErr error
+	var out string
+	errText := test.Stderr(t, func() {
+		out = test.Stdout(t, func() {
+			runErr = run(t.Context(), []string{"build", "macos", "--help"})
+		})
+	})
+	require.NoError(t, runErr, out+errText)
+	assert.Contains(t, out+errText, "--go-only")
 }
 
 func TestBuildMacOS_GoOnly_Counter(t *testing.T) {
 	repoRoot, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	// cmd tests run from cmd/eletrocromo
 	counter := filepath.Join(repoRoot, "examples", "counter", "eletrocromo.json")
 	if _, err := os.Stat(counter); err != nil {
@@ -29,20 +32,21 @@ func TestBuildMacOS_GoOnly_Counter(t *testing.T) {
 	}
 	work := t.TempDir()
 	iconsOut := filepath.Join(t.TempDir(), "icons")
-	buf, err := runCLI(t,
-		"build", "macos",
-		"--config", counter,
-		"--go-only",
-		"--workdir", work,
-		"--output", iconsOut,
-	)
-	if err != nil {
-		t.Fatalf("%v\n%s", err, buf)
-	}
-	if _, err := os.Stat(filepath.Join(work, "bin", "eletrocromo-server")); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(buf, "helper:") {
-		t.Fatalf("stdout: %s", buf)
-	}
+	var runErr error
+	var buf string
+	errText := test.Stderr(t, func() {
+		buf = test.Stdout(t, func() {
+			runErr = run(t.Context(), []string{
+				"build", "macos",
+				"--config", counter,
+				"--go-only",
+				"--workdir", work,
+				"--output", iconsOut,
+			})
+		})
+	})
+	require.NoError(t, runErr, buf+errText)
+	_, err = os.Stat(filepath.Join(work, "bin", "eletrocromo-server"))
+	require.NoError(t, err)
+	assert.Contains(t, buf+errText, "helper:")
 }

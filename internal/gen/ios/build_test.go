@@ -2,19 +2,19 @@ package ios
 
 import (
 	"bytes"
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuild_GoOnly_Counter(t *testing.T) {
 	repoRoot, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	counterDir := filepath.Join(repoRoot, "examples", "counter")
 	if _, err := os.Stat(filepath.Join(counterDir, "main.go")); err != nil {
 		t.Skip("examples/counter not present")
@@ -35,37 +35,26 @@ func TestBuild_GoOnly_Counter(t *testing.T) {
 		Stdout:      &buf,
 		Stderr:      &buf,
 	})
-	if err != nil {
-		t.Fatalf("%v\n%s", err, buf.String())
-	}
-	if _, err := os.Stat(filepath.Join(work, "project.yml")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(work, "Assets.xcassets", "AppIcon.appiconset", "AppIcon.png")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, buf.String())
+	_, err = os.Stat(filepath.Join(work, "project.yml"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(work, "Assets.xcassets", "AppIcon.appiconset", "AppIcon.png"))
+	require.NoError(t, err)
 	logoDir := filepath.Join(work, "Assets.xcassets", "SplashLogo.imageset")
 	for _, name := range []string{"SplashLogo.png", "SplashLogo@2x.png", "SplashLogo@3x.png"} {
-		if _, err := os.Stat(filepath.Join(logoDir, name)); err != nil {
-			t.Fatal(err)
-		}
+		_, err := os.Stat(filepath.Join(logoDir, name))
+		require.NoError(t, err)
 	}
 	if runtime.GOOS != "darwin" {
-		if res.ArchivePath != "" {
-			t.Fatalf("expected empty archive path off darwin, got %s", res.ArchivePath)
-		}
+		assert.Empty(t, res.ArchivePath)
 		return
 	}
-	if res.ArchivePath == "" {
-		t.Fatal("empty archive path")
-	}
+	require.NotEmpty(t, res.ArchivePath)
 	st, err := os.Stat(res.ArchivePath)
-	if err != nil || st.Size() < 1000 {
-		t.Fatalf("archive %s: %v size=%d", res.ArchivePath, err, st.Size())
-	}
-	if _, err := os.Stat(strings.TrimSuffix(res.ArchivePath, ".a") + ".h"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, st.Size(), int64(1000))
+	_, err = os.Stat(strings.TrimSuffix(res.ArchivePath, ".a") + ".h")
+	require.NoError(t, err)
 }
 
 func TestBuild_FullRequiresDarwin(t *testing.T) {
@@ -77,7 +66,5 @@ func TestBuild_FullRequiresDarwin(t *testing.T) {
 		BaseDir: t.TempDir(),
 		OutApp:  filepath.Join(t.TempDir(), "X.app"),
 	})
-	if !errors.Is(err, ErrDarwinRequired) {
-		t.Fatalf("got %v want ErrDarwinRequired", err)
-	}
+	require.ErrorIs(t, err, ErrDarwinRequired)
 }

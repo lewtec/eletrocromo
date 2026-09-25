@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestServeHTTP_NilHandler_NotFound(t *testing.T) {
@@ -11,10 +13,6 @@ func TestServeHTTP_NilHandler_NotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?token=secret-token", nil)
 	w := httptest.NewRecorder()
 	app.ServeHTTP(w, req)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d", http.StatusNotFound, w.Code)
-	}
-	if body := w.Body.String(); body != "no handler setup" {
-		t.Fatalf("unexpected body %q", body)
-	}
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, "no handler setup", w.Body.String())
 }
