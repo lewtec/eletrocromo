@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Build one eletrocromo.json app and launch it.
-# usage: mobile-run.sh ios|android path/to/eletrocromo.json
+# usage: mobile-run.sh ios|android|mac path/to/eletrocromo.json
 set -euo pipefail
 
 platform="${1:-}"
 config="${2:-}"
-if [[ "$platform" != ios && "$platform" != android ]] || [[ -z "$config" ]]; then
-	echo "usage: $0 ios|android path/to/eletrocromo.json" >&2
+if [[ "$platform" != ios && "$platform" != android && "$platform" != mac ]] || [[ -z "$config" ]]; then
+	echo "usage: $0 ios|android|mac path/to/eletrocromo.json" >&2
 	exit 2
 fi
 
@@ -66,5 +66,14 @@ android)
 	adb install -r "$apk"
 	adb shell am start -n "${package_id}/.MainActivity"
 	echo "launched ${app_name} (${package_id}) from ${apk}"
+	;;
+mac)
+	app="$root/dist/${slug}.app"
+	go run ./cmd/eletrocromo build macos \
+		--config "$config" \
+		--out "$app" \
+		--workdir "$root/dist/macos-${slug}"
+	open "$app"
+	echo "launched ${app_name} (${package_id}) from ${app}"
 	;;
 esac

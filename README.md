@@ -184,7 +184,7 @@ go run ./cmd/eletrocromo build macos \
   --config examples/counter/eletrocromo.json \
   --out dist/Counter.app
 
-mise run macos:counter
+mise run mac:run examples/counter/eletrocromo.json
 ```
 
 The `.app` is unsigned Debug. First open: right-click → Open. Off-loopback

@@ -29,18 +29,6 @@ ci = { depends = ["lint", "test", "check"] }
 # Local binary (same package as releases).
 "build:cli" = "go build -o bin/eletrocromo ./cmd/eletrocromo"
 
-"macos:counter" = """
-go run ./cmd/eletrocromo build macos \
-  --config examples/counter/eletrocromo.json \
-  --out dist/Counter.app \
-  --workdir dist/macos-counter
-"""
-"macos:counter:go" = """
-go run ./cmd/eletrocromo build macos \
-  --config examples/counter/eletrocromo.json \
-  --go-only \
-  --workdir dist/macos-counter
-"""
 "icons" = "go run ./cmd/eletrocromo build icons --refresh-icons"
 
 # Dogfood host resolve + Helium --app (Ctrl+C to quit).
@@ -55,6 +43,15 @@ go run ./cmd/eletrocromo build macos \
 
 # Release extras: desktop archives come from GoReleaser; these tasks build
 # the packaging targets (APK / .app) and are invoked by Autorelease only.
+[tasks."mac:run"]
+description = "Build a macOS .app and open it"
+usage = '''
+arg "<config>" help="Path to eletrocromo.json"
+'''
+run = '''
+bash scripts/mobile-run.sh mac "${usage_config}"
+'''
+
 [tasks."ios:run"]
 description = "Build an iOS Simulator .app, install it, and launch it"
 usage = '''
