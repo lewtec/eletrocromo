@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lewtec/lewkit/x/image/convert"
 	xdraw "golang.org/x/image/draw"
 )
 
@@ -118,7 +119,7 @@ func KnockoutBackground(src image.Image) *image.NRGBA {
 	// Only the canvas connected to the border. Interior highlights stay.
 	w, h := b.Dx(), b.Dy()
 	reach := make([]bool, w*h)
-	idx := func(x, y int) int { return (x-b.Min.X) + (y-b.Min.Y)*w }
+	idx := func(x, y int) int { return (x - b.Min.X) + (y-b.Min.Y)*w }
 	q := make([]int, 0, w+h)
 	push := func(x, y int) {
 		if x < b.Min.X || y < b.Min.Y || x >= b.Max.X || y >= b.Max.Y {
@@ -296,30 +297,16 @@ func Resize(src image.Image, size int) *image.NRGBA {
 	return dst
 }
 
-// EncodePNG encodes img as PNG bytes.
-func EncodePNG(img image.Image) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
 // WritePNG writes a PNG file, creating parent dirs.
-func WritePNG(path string, img image.Image) (err error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.Create(path)
+func WritePNG(path string, img image.Image) error {
+	raw, err := convert.EncodePNG(img)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
-	}()
-	return png.Encode(f, img)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0o644)
 }
 
 // FlattenOpaque draws src onto white (for formats that dislike alpha).

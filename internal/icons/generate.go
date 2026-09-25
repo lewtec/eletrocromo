@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lewtec/lewkit/x/image/convert"
 )
 
 // Sentinel errors for icon generation.
@@ -92,12 +94,9 @@ func Generate(opts Options) (*Manifest, error) {
 
 	// Knock out light photo canvas so splash/launcher icons are not boxed.
 	img = KnockoutBackground(img)
-	square := PadCenter(img)
-	// Work from a high-res square for downscales
-	if square.Bounds().Dx() < 1024 {
-		square = Resize(square, 1024)
-	} else if square.Bounds().Dx() > 1024 {
-		square = Resize(square, 1024)
+	square, err := squareMaster(img)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := os.MkdirAll(absOut, 0o755); err != nil {
@@ -116,14 +115,14 @@ func Generate(opts Options) (*Manifest, error) {
 
 	// windows/
 	winPath := filepath.Join(absOut, "windows", "icon.ico")
-	if err := WriteICO(winPath, square, WindowsICOSizes); err != nil {
+	if err := writeICO(winPath, square, WindowsICOSizes); err != nil {
 		return nil, err
 	}
 	record("windows/icon.ico", "multi-size ico")
 
 	// macos/
 	macPath := filepath.Join(absOut, "macos", "icon.icns")
-	if err := WriteICNS(macPath, square, MacOSICNSSizes); err != nil {
+	if err := writeICNS(macPath, square, macOSICNSSpecs()); err != nil {
 		return nil, err
 	}
 	record("macos/icon.icns", "png-in-icns")
@@ -155,7 +154,7 @@ func Generate(opts Options) (*Manifest, error) {
 		record(filepath.ToSlash(rel), fmt.Sprintf("%dpx", w.Size))
 	}
 	webIco := filepath.Join(absOut, "web", "favicon.ico")
-	if err := WriteICO(webIco, square, []int{16, 32, 48}); err != nil {
+	if err := writeICO(webIco, square, []int{16, 32, 48}); err != nil {
 		return nil, err
 	}
 	record("web/favicon.ico", "16/32/48")
@@ -222,6 +221,50 @@ func ApplyMacOSICNS(iconRoot, destICNS string) error {
 		return err
 	}
 	return os.WriteFile(destICNS, raw, 0o644)
+}
+
+func squareMaster(img image.Image) (*image.NRGBA, error) {
+	b := img.Bounds()
+	side := b.Dx()
+	if b.Dy() > side {
+		side = b.Dy()
+	}
+	// Already the master size: Square would scale 1:1 and change pixels.
+	if side == 1024 {
+		return PadCenter(img), nil
+	}
+	return convert.Square(img, 1024)
+}
+
+func macOSICNSSpecs() []convert.ICNSSpec {
+	specs := make([]convert.ICNSSpec, len(MacOSICNSSizes))
+	for i, sp := range MacOSICNSSizes {
+		specs[i] = convert.ICNSSpec{Type: sp.Type, Size: sp.Size}
+	}
+	return specs
+}
+
+func writeICO(path string, square image.Image, sizes []int) error {
+	raw, err := convert.EncodeICO(square, sizes)
+	if err == nil {
+		err = writeBytes(path, raw)
+	}
+	return err
+}
+
+func writeICNS(path string, square image.Image, specs []convert.ICNSSpec) error {
+	raw, err := convert.EncodeICNS(square, specs)
+	if err == nil {
+		err = writeBytes(path, raw)
+	}
+	return err
+}
+
+func writeBytes(path string, raw []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0o644)
 }
 
 func readManifest(dir string) (*Manifest, error) {

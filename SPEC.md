@@ -27,7 +27,7 @@ Not this library’s job (now or as “quiet scope creep”):
 | File/folder dialogs as library APIs | App/HTTP/browser concerns |
 | JS ↔ Go IPC bridge beyond ordinary HTTP/WebSocket | Would become Wails |
 | Vendoring a browser **inside the eletrocromo module** | Desktop uses the OS web view through lewkit. No browser blobs in-tree |
-| Importing workspaced into the **runtime library** used at `App.Run()` | Packaging CLI may import workspaced packages (e.g. `taskgroup`). Desktop `Run()` does not |
+| Importing workspaced into the **runtime library** used at `App.Run()` | Packaging CLI uses `github.com/lewtec/lewkit/x/taskgroup` and does not import workspaced. Desktop `Run()` does not |
 | Auto-updater, full installer product, mandatory PE embedding | Distribution is separate. JIT `build macos` is the Mac packaging product; DMG/notarization are not v1 |
 | Frontend framework or SPA opinions | App serves whatever it wants |
 | Multi-window platform APIs | Out of scope |
@@ -88,7 +88,7 @@ Runtime library and packaging CLI share a repo but **different dependency rules*
 │  build macos   ──► JIT XcodeGen host + darwin Go + .app     │
 │  build ios     ──► JIT XcodeGen host + ios c-archive + .app │
 │       │            (icns / mipmaps from icon tree)          │
-│       └── taskgroup orchestration (workspaced import OK)    │
+│       └── taskgroup orchestration (lewkit/x/taskgroup)      │
 │                                                             │
 │  Config: eletrocromo.json (package_id, icon, …) + flags     │
 └─────────────────────────────────────────────────────────────┘
@@ -168,7 +168,7 @@ On desktop, the UI is one OS web view from lewkit `x/driver/webview`. The page h
 |--------|----------|
 | Missing web view framework | Hard error |
 | Workspaced integration (runtime library) | Do not import `github.com/lucasew/workspaced` into the library path used by apps at `Run()` |
-| Workspaced integration (packaging CLI) | **`cmd/eletrocromo` may import** workspaced packages (e.g. `taskgroup`) and still **subprocess** `workspaced tool which` for icon/raster tools |
+| Workspaced integration (packaging CLI) | No workspaced Go import. Orchestration is `github.com/lewtec/lewkit/x/taskgroup`. Still **subprocess** `workspaced tool which` for icon/raster tools |
 | Tests / CI | Unit tests substitute the window opener. They do not open a real view |
 
 **Security / trust:**
@@ -240,7 +240,7 @@ Separate from desktop tray/lifetime. Complete when:
 5. **`build macos`:** JIT XcodeGen + Swift host + host-arch darwin Go + unsigned Debug `.app`; runs icons when `macos/icon.icns` is missing (or `--refresh-icons`); `--go-only` skips `xcodebuild`.
 6. **Config:** `icon` field on `eletrocromo.json`; flags override; **no Mac-only json keys** in v1.
 7. **Conversion:** Go libs preferred; workspaced ensure for missing tools; fail closed.
-8. **Orchestration:** workspaced `taskgroup` (or equivalent imported API) for named deps.
+8. **Orchestration:** `github.com/lewtec/lewkit/x/taskgroup` for named deps.
 9. **Docs:** GoReleaser OSS hooks + Pro `app_bundles.icon` / nFPM/Snap recipes; users wire embedding. `build macos` is the happy-path `.app`; DMG is not.
 10. **Deprecate or demote** happy-path `android create` (JIT build is the product).
 
@@ -363,7 +363,7 @@ eletrocromo build ios          → JIT XcodeGen + UIKit host + GOOS=ios c-archiv
 | `--output` | Icon tree root (default `dist/icons`) |
 | `--refresh-icons` | Force full icon regen; without it, generate only when **expected outputs are missing** |
 | Scaffold | **Just-in-time** for android, macos, and ios (no happy-path `create` / commit host project) |
-| Orchestration | **workspaced `taskgroup`** (named tasks, deps: icons → android/macos/ios steps) |
+| Orchestration | **`github.com/lewtec/lewkit/x/taskgroup`** (named tasks, deps: icons → android/macos/ios steps) |
 
 Migrate existing `eletrocromo android build` / `android create` to the `build …` surface; `create` is not the product path and may be removed after migration.
 
@@ -447,7 +447,7 @@ Existing fields remain (`schema_version`, `package_id`, `app_name`, `go_main`, `
 | Tray / lockfile | Absent or partial | Linux v1 requirement |
 | Example | counter / ticker / basic / astro | Template counter + mode flag as dogfood bar |
 | Packaging CLI | `build icons` / `build android` / `build macos`; default mark; full icon matrix; taskgroup | `build ios` scaffold: JIT Debug `.app` (WKWebView + c-archive). Grill before treating as product |
-| workspaced dep | Subprocess only (library + CLI) | Library: subprocess only. CLI: may `require` workspaced modules + tool ensure |
+| workspaced dep | Subprocess only (library + CLI) | Library: subprocess only. CLI: `lewkit/x/taskgroup`; subprocess workspaced for tool ensure |
 | README | Architecture + CLI + APK blurb | Align with this SPEC (desktop + packaging) |
 
 ## Success criteria
@@ -502,7 +502,7 @@ Resolved by engineering when building, not by re-litigating product meaning:
 - Which workspaced catalog tool names back SVG/ICO/ICNS conversion
 - Precise “outputs missing” checklist for skip-vs-generate
 - Whether `cmd/eletrocromo` stays `CGO_ENABLED=0` while shelling to external converters
-- Module path/version pin for importing workspaced (`taskgroup`, …)
+- Module path/version pin for subprocess workspaced tool ensure
 - AppKit vs SwiftUI for the WKWebView shell (dumb splash + WebView, not rterm chrome)
 - Path of the Go child inside the `.app` (`Contents/MacOS` vs `Helpers`)
 - Ephemeral project shape (XcodeGen `project.yml` vs checked-in template xcodeproj)

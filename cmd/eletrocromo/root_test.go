@@ -137,6 +137,7 @@ func TestEnsureBuildIcons(t *testing.T) {
 func TestRunIconsThen(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "icons")
 	cmd := newRootCmd()
+	cmd.SetContext(t.Context())
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
