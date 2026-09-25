@@ -31,7 +31,8 @@ type App struct {
 	Handler   http.Handler
 	AuthToken string
 	WaitGroup sync.WaitGroup
-	Context   context.Context
+	// Context is the process lifetime. Required.
+	Context context.Context
 
 	// NoUI skips the desktop web view and only serves loopback HTTP.
 	// Used by the Android, iOS, and macOS packaged hosts (and tests).
@@ -50,20 +51,12 @@ const ReadyLinePrefix = "ELETROCROMO_READY "
 
 const AUTH_COOKIE_KEY = "eletrocromo_token"
 
-// background is the default when App.Context is nil (same for Run and BackgroundRun).
-// Package-level so methods do not call context.Background directly.
-var background = context.Background()
-
 // BackgroundRun starts task in a new goroutine and tracks it on WaitGroup.
 // It returns immediately after scheduling; task errors are logged.
 // Callers must not wrap BackgroundRun in another goroutine — Add runs
 // synchronously so WaitGroup.Wait is race-free with respect to this call.
-// A nil App.Context is treated as context.Background(), matching Run.
 func (a *App) BackgroundRun(task Task) error {
 	ctx := a.Context
-	if ctx == nil {
-		ctx = background
-	}
 	a.WaitGroup.Add(1)
 	go func() {
 		defer a.WaitGroup.Done()
@@ -140,9 +133,6 @@ func (a *App) Run() error {
 
 	if a.AuthToken == "" {
 		a.AuthToken = uuid.New().String()
-	}
-	if a.Context == nil {
-		a.Context = background
 	}
 	ctx, cancel := context.WithCancel(a.Context)
 	defer cancel()
