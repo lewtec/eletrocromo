@@ -113,11 +113,7 @@ import _ "embed"
 //go:embed eletrocromo_icon.png
 var eletrocromoIconPNG []byte
 
-func init() {
-	if len(eletrocromoIconPNG) == 0 {
-		panic("eletrocromo icon")
-	}
-}
+var _ = eletrocromoIconPNG
 EOF
 		cleanup+=("$mod_dir/eletrocromo_icon.png" "$mod_dir/eletrocromo_icon.go")
 	fi
