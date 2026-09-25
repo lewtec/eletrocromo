@@ -189,7 +189,7 @@ mise run linux:run examples/counter/eletrocromo.json
 mise run windows:run examples/counter/eletrocromo.json
 ```
 
-`linux:run` and `windows:run` set `GOOS` and `GOARCH` with `CGO_ENABLED=0`. `GOARCH` defaults to this machine (`GOARCH=amd64 mise run windows:run …` overrides it). The binary is executed only when the host matches that pair. The Windows exe carries the icon in its PE resources. The Linux ELF carries the 256px PNG inside the binary.
+`linux:run` and `windows:run` call `eletrocromo build linux` and `build windows`. Those set `GOOS` and `GOARCH` with `CGO_ENABLED=0`. `GOARCH` defaults to this machine. The binary starts only when the host matches. No custom icon uses the atom mark. The Windows exe stores it in the PE resources. The Linux binary embeds the 256px PNG. Neither writes into the app module.
 
 The `.app` is unsigned Debug. First open: right-click → Open. Off-loopback
 http(s) links open in the default browser. Packaging lives in `internal/gen/mac/`.

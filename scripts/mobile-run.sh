@@ -36,17 +36,12 @@ pkg = str(cfg.get("package_id", "")).strip()
 if not pkg:
     sys.exit("package_id is required")
 name = str(cfg.get("app_name") or pkg.rsplit(".", 1)[-1]).strip()
-main = str(cfg.get("go_main") or ".").strip() or "."
 print(pkg)
 print(name)
-print(main)
 PY
 )"
 package_id="${meta%%$'\n'*}"
-rest="${meta#*$'\n'}"
-app_name="${rest%%$'\n'*}"
-go_main="${rest#*$'\n'}"
-mod_dir="$(cd "$(dirname "$config")" && cd "$go_main" && pwd)"
+app_name="${meta#*$'\n'}"
 
 case "$platform" in
 ios)
@@ -92,43 +87,17 @@ mac)
 	;;
 linux | windows)
 	arch="${GOARCH:-$(go env GOARCH)}"
-	icons="$root/dist/icons"
-	go run ./cmd/eletrocromo build icons --config "$config" --output "$icons"
-	mkdir -p "$root/dist"
 	bin="$root/dist/${slug}-${platform}-${arch}"
-	cleanup=()
 	if [[ "$platform" == windows ]]; then
 		bin="${bin}.exe"
-		syso="$mod_dir/rsrc_windows_${arch}.syso"
-		go run ./scripts/winsyso -arch "$arch" -ico "$icons/windows/icon.ico" -o "$syso"
-		cleanup+=("$syso")
-	else
-		cp "$icons/linux/icon-256.png" "$mod_dir/eletrocromo_icon.png"
-		pkg="$(awk '/^package /{print $2; exit}' "$mod_dir"/*.go)"
-		cat >"$mod_dir/eletrocromo_icon.go" <<EOF
-package ${pkg}
-
-import _ "embed"
-
-//go:embed eletrocromo_icon.png
-var eletrocromoIconPNG []byte
-
-var _ = eletrocromoIconPNG
-EOF
-		cleanup+=("$mod_dir/eletrocromo_icon.png" "$mod_dir/eletrocromo_icon.go")
 	fi
-	trap 'rm -f "${cleanup[@]}"' EXIT
-	echo "building ${app_name} GOOS=${platform} GOARCH=${arch}"
-	(
-		cd "$mod_dir"
-		GOOS="$platform" GOARCH="$arch" CGO_ENABLED=0 go build -o "$bin" .
-	)
-	rm -f "${cleanup[@]}"
-	trap - EXIT
+	go run ./cmd/eletrocromo build "$platform" \
+		--config "$config" \
+		--out "$bin" \
+		--arch "$arch"
 	if [[ "$(go env GOHOSTOS)" == "$platform" && "$(go env GOHOSTARCH)" == "$arch" ]]; then
 		echo "running ${bin}"
 		exec "$bin"
 	fi
-	echo "built ${bin}"
 	;;
 esac
