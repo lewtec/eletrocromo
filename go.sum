@@ -8,6 +8,8 @@ github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/lewtec/lewkit v0.0.0-20260924172916-363fac3090d3 h1:WjDLcztPyxL955rC7xeo08TlqBLe43lFDLPzaSa6jlk=
 github.com/lewtec/lewkit v0.0.0-20260924172916-363fac3090d3/go.mod h1:0N8OSgxa40I4eQk1zlku8z2BAMwfMKOaPTltiiyktQo=
+github.com/lewtec/lewkit v0.0.0-20260926004721-11710eb97853 h1:Q9WSq9PoTeu9+j5qn3Fg7FBqz3hQmIR7v/AVfi3jTYU=
+github.com/lewtec/lewkit v0.0.0-20260926004721-11710eb97853/go.mod h1:5JbYG3q20rGDjBvl3jc2AVwkC18lZMk87AMGWkPZJBk=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
@@ -16,3 +18,5 @@ golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba h1:Ck8QetSgk912qxWLMCKxd0in+
 golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba/go.mod h1:50RgIsmK7OwqzTTeqcSXQW8SswW0o8fRcDxmqGluJ8E=
 golang.org/x/image v0.44.0 h1:+tDekMZED9+LrtB3G5xzRggpVh9CARjZqROla3R3R+I=
 golang.org/x/image v0.44.0/go.mod h1:V8K3KE9KKKE+pLpQDOeN18w9oacNSvy1tDOirTu4xtY=
+golang.org/x/text v0.42.0 h1:JbOZXgfeCPU9gacVtYliJqOhD+zhrEqK4LfdpmlUZqI=
+golang.org/x/text v0.42.0/go.mod h1:ojzP1Z+2QtioaF8DTtO8K5q7JWVVYwZKenzujK0Zd0E=
