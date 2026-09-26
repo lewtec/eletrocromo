@@ -81,7 +81,7 @@ go run ./cmd/eletrocromo run --goos ios "${usage_config}"
 
 [tasks."android:run"]
 description = "Build a debug APK, install it on the connected device, and launch it"
-tools = { java = "temurin-17", android-sdk = "19.0", gradle = "8.9" }
+tools = { java = "temurin-25", android-sdk = "19.0", gradle = "8.9" }
 usage = '''
 arg "<config>" help="Path to eletrocromo.json"
 '''
