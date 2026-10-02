@@ -20,9 +20,10 @@ type HostConfig struct {
 	Capabilities Capabilities
 }
 
-// ApplyHostDefaults trims identity fields, fills empty app name / version / go_main,
-// and validates the package id and capabilities.
-func ApplyHostDefaults(cfg HostConfig) (HostConfig, error) {
+// ApplyIdentityDefaults trims identity fields and fills empty app name, version,
+// and go_main. It does not validate capabilities; ApplyHostDefaults does that
+// after these defaults.
+func ApplyIdentityDefaults(cfg HostConfig) (HostConfig, error) {
 	cfg.PackageID = strings.TrimSpace(cfg.PackageID)
 	if err := eletrocromo.ValidateAppID(cfg.PackageID); err != nil {
 		return HostConfig{}, fmt.Errorf("package id: %w", err)
@@ -43,6 +44,16 @@ func ApplyHostDefaults(cfg HostConfig) (HostConfig, error) {
 	}
 	if strings.TrimSpace(cfg.GoMain) == "" {
 		cfg.GoMain = "."
+	}
+	return cfg, nil
+}
+
+// ApplyHostDefaults trims identity fields, fills empty app name / version / go_main,
+// and validates the package id and capabilities.
+func ApplyHostDefaults(cfg HostConfig) (HostConfig, error) {
+	cfg, err := ApplyIdentityDefaults(cfg)
+	if err != nil {
+		return HostConfig{}, err
 	}
 	if err := cfg.Capabilities.Validate(); err != nil {
 		return HostConfig{}, err
