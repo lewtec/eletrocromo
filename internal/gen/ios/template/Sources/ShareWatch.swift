@@ -33,19 +33,4 @@ enum ShareWatch {
         let window = scene?.windows.first { $0.isKeyWindow } ?? UIApplication.shared.windows.first
         return window?.rootViewController
     }
-
-    private static func decode(_ line: String) -> [Any]? {
-        guard let raw = line.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
-        else { return nil }
-        var items: [Any] = []
-        if let text = obj["text"] as? String, !text.isEmpty { items.append(text) }
-        if let url = obj["url"] as? String, let u = URL(string: url) { items.append(u) }
-        if let paths = obj["paths"] as? [String] {
-            for p in paths {
-                items.append(URL(fileURLWithPath: p))
-            }
-        }
-        return items.isEmpty ? nil : items
-    }
 }
