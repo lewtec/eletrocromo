@@ -44,7 +44,7 @@ jobs:
           git config user.name actions-bot
           git config user.email actions-bot@users.noreply.github.com
 
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5
 
       - name: Install
         run: mise run install
@@ -124,7 +124,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5
 
       - name: Install
         run: mise run install
