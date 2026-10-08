@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/lewtec/lewkit v0.0.0-20260924172916-363fac3090d3
+	github.com/lewtec/lewkit v0.0.0-20261008021425-b30edc40de58
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/image v0.44.0
 )
